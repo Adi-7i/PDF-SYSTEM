@@ -1,0 +1,1294 @@
+<!DOCTYPE html>
+<html lang="en" 
+    x-data="{ theme: localStorage.getItem('theme') || 'dark', selectedPDFs: [], selectedTestType: 'mcq', selectedDifficulty: 'beginner', showHistory: false }" 
+    x-init="
+        $watch('theme', val => { 
+            localStorage.setItem('theme', val); 
+            document.documentElement.setAttribute('data-theme', val); 
+        });
+        document.documentElement.setAttribute('data-theme', theme);
+    "
+>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Smart PDF Q&A - Test Generator</title>
+    
+    <!-- Alpine.js via CDN -->
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/green-theme.css?v=2.0.1">
+    
+    <script>
+        // Set dark theme as default
+        document.documentElement.setAttribute('data-theme', 'dark');
+            
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dark: '#1a1a1e',
+                        green: '#4CAF50',
+                        'green-dark': '#388E3C',
+                        'green-light': '#e6f7e6'
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        /* Hide elements marked with x-cloak until Alpine.js is ready */
+        [x-cloak] { display: none !important; }
+        
+        /* Test-specific styles */
+        .test-type-option {
+            transition: all 0.3s ease;
+            border: 1px solid transparent;
+        }
+        
+        .test-type-option:hover {
+            transform: translateY(-3px);
+        }
+        
+        .test-type-option.selected {
+            border-color: var(--accent);
+            background-color: rgba(76, 175, 80, 0.1);
+        }
+        
+        .difficulty-btn {
+            padding: 0.4rem 1rem;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            transition: all 0.2s ease;
+        }
+        
+        .difficulty-btn.active {
+            background-color: var(--accent);
+            color: white;
+        }
+        
+        .file-card {
+            background-color: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            border: 1px solid transparent;
+        }
+        
+        .file-card.selected {
+            background-color: var(--accent);
+            color: white;
+        }
+        
+        .chat-bubble {
+            position: relative;
+            max-width: 80%;
+            padding: 12px 16px;
+            border-radius: 16px;
+            margin-bottom: 12px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+            word-wrap: break-word;
+        }
+        
+        .user-bubble {
+            background-color: rgba(161, 209, 177, 0.2);
+            color: #fff;
+            border-bottom-right-radius: 4px;
+            margin-left: auto;
+        }
+        
+        .ai-bubble {
+            background-color: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            border-bottom-left-radius: 4px;
+            margin-right: auto;
+        }
+        
+        .timestamp {
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 4px;
+        }
+        
+        .dragging {
+            border-radius: 0.5rem;
+            border: 2px dashed var(--green);
+        }
+        
+        @media (max-width: 768px) {
+            .chat-bubble {
+                max-width: 85%;
+                padding: 10px 14px;
+                margin-bottom: 8px;
+            }
+            
+            .file-card {
+                min-height: auto;
+                padding: 0.5rem;
+            }
+            
+            .test-type-option {
+                padding: 0.75rem;
+            }
+            
+            .test-type-option svg {
+                height: 2.5rem;
+                width: 2.5rem;
+            }
+        }
+        
+        @media (max-width: 640px) {
+            .chat-bubble {
+                max-width: 90%;
+            }
+            
+            .test-type-option {
+                padding: 0.5rem;
+            }
+            
+            .difficulty-btn {
+                font-size: 0.75rem;
+                padding: 0.3rem 0.75rem;
+            }
+            
+            .test-type-option .text-xl {
+                font-size: 1rem;
+            }
+            
+            /* Improve mobile UX */
+            .sidebar-icon {
+                padding: 0.5rem;
+            }
+            
+            .w-16 {
+                width: 3rem;
+            }
+            
+            .p-6 {
+                padding: 1rem;
+            }
+            
+            h1.text-2xl {
+                font-size: 1.25rem;
+            }
+            
+            .flex-1.overflow-y-auto.p-6 {
+                padding: 0.75rem;
+            }
+            
+            button.w-full {
+                padding: 0.75rem;
+            }
+            
+            .test-details {
+                font-size: 0.9rem;
+            }
+            
+            #questionsContainer {
+                padding: 0.75rem;
+            }
+            
+            /* Fix file card text overflow */
+            .file-card h3 {
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                max-width: 100%;
+            }
+            
+            /* Make MCQ options wrap better */
+            #questionsContainer .mb-8 p {
+                word-break: break-word;
+            }
+            
+            /* Fix overlapping content */
+            .grid.grid-cols-1.md\:grid-cols-2.gap-4.mb-8 {
+                gap: 0.5rem;
+            }
+            
+            .grid.grid-cols-1.md\:grid-cols-3.gap-4.mb-8 {
+                gap: 0.5rem;
+            }
+            
+            /* Fix PDF cards */
+            .file-card.p-4 {
+                padding: 0.75rem;
+            }
+            
+            /* Fix for iOS */
+            @supports (-webkit-touch-callout: none) {
+                input[type="text"], input[type="number"], textarea {
+                    font-size: 16px;
+                }
+                
+                button, a, .file-card, .test-type-option, .difficulty-btn {
+                    -webkit-tap-highlight-color: transparent;
+                }
+                
+                @supports (padding-top: env(safe-area-inset-top)) {
+                    body {
+                        padding-top: env(safe-area-inset-top);
+                        padding-bottom: env(safe-area-inset-bottom);
+                        padding-left: env(safe-area-inset-left);
+                        padding-right: env(safe-area-inset-right);
+                    }
+                    
+                    /* Fix PDF selection overlaps */
+                    .grid.grid-cols-1.md\:grid-cols-2.gap-4.mb-8 {
+                        margin-bottom: 1rem !important;
+                    }
+                }
+            }
+        }
+    </style>
+</head>
+
+<body class="min-h-screen bg-dark">
+    <div class="flex min-h-screen">
+        <!-- Sidebar -->
+        <div class="w-16 bg-dark border-r border-gray-700 flex flex-col items-center py-6">
+            <a href="/dashboard" class="sidebar-icon mb-8">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+            </a>
+            
+            <a href="/dashboard" class="sidebar-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+            </a>
+            
+            <a href="/chat" class="sidebar-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+            </a>
+            
+            <a href="/test" class="sidebar-icon bg-green text-white">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+            </a>
+            
+            <a href="#" class="sidebar-icon mt-auto">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+            </a>
+        </div>
+        
+        <!-- Main Content -->
+        <div id="testApp" class="flex-1 flex flex-col" x-data="testApp()">
+            <header class="flex justify-between items-center p-6 border-b border-gray-800">
+                <div class="flex items-center">
+                    <h1 class="text-2xl font-bold text-green">Smart PDF Q&A</h1>
+                    <span class="ml-2 text-xs bg-green text-white px-2 py-0.5 rounded-full">Test</span>
+                </div>
+                <div>
+                    <button @click="showHistory = !showHistory" class="text-gray-400 hover:text-white">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </button>
+                </div>
+            </header>
+            
+            <div class="flex-1 flex overflow-hidden">
+                <!-- Test Setup Panel -->
+                <div class="w-full h-full flex flex-col" :class="{'hidden': testStarted}">
+                    <div class="flex-1 overflow-y-auto p-6">
+                        <h2 class="text-xl font-semibold mb-4">Selected PDFs <span class="text-sm text-gray-400">(Choose up to 2)</span></h2>
+                        
+                        <!-- PDF Selection -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                            <template x-for="pdf in availablePDFs" :key="pdf.id">
+                                <div 
+                                    class="file-card p-4 cursor-pointer flex items-start"
+                                    :class="{'selected': selectedPDFs.some(p => p.id === pdf.id)}"
+                                    @click="togglePDFSelection(pdf)"
+                                >
+                                    <div class="mr-3 mt-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                    </div>
+                                    <div class="flex-1">
+                                        <h3 class="font-medium truncate" x-text="pdf.filename"></h3>
+                                        <div class="flex items-center text-sm text-gray-400 mt-1">
+                                            <span x-text="pdf.pages + ' pages'"></span>
+                                            <span class="mx-2">•</span>
+                                            <span x-text="formatFileSize(pdf.size)"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                            
+                            <!-- Upload button if no PDFs or less than 2 selected -->
+                            <div 
+                                x-show="availablePDFs.length === 0 || availablePDFs.length < 2"
+                                @click="openFileBrowser()"
+                                class="file-card p-4 cursor-pointer flex flex-col items-center justify-center h-32"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-green mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                </svg>
+                                <span class="text-green">Upload PDF</span>
+                                <input type="file" id="fileInput" class="hidden" accept=".pdf" @change="handleFileUpload($event)">
+                            </div>
+                        </div>
+                        
+                        <!-- Test Type Selection -->
+                        <h2 class="text-xl font-semibold mb-4">Test Type</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                            <!-- MCQ Option -->
+                            <div 
+                                class="test-type-option cursor-pointer p-4 rounded-lg flex flex-col items-center text-center"
+                                :class="{'selected': selectedTestType === 'mcq'}"
+                                @click="selectedTestType = 'mcq'"
+                            >
+                                <div class="mb-3 text-4xl text-gray-300">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-14 w-14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                    </svg>
+                                </div>
+                                <h3 class="text-xl font-medium mb-1">MCQ</h3>
+                                <p class="text-gray-400 text-sm">15 Multiple Choice Questions</p>
+                            </div>
+                            
+                            <!-- Long Type Option -->
+                            <div 
+                                class="test-type-option cursor-pointer p-4 rounded-lg flex flex-col items-center text-center"
+                                :class="{'selected': selectedTestType === 'long'}"
+                                @click="selectedTestType = 'long'"
+                            >
+                                <div class="mb-3 text-4xl text-gray-300">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-14 w-14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                </div>
+                                <h3 class="text-xl font-medium mb-1">Long Type</h3>
+                                <p class="text-gray-400 text-sm">10 Descriptive Questions</p>
+                            </div>
+                            
+                            <!-- Test Option -->
+                            <div 
+                                class="test-type-option cursor-pointer p-4 rounded-lg flex flex-col items-center text-center"
+                                :class="{'selected': selectedTestType === 'mixed'}"
+                                @click="selectedTestType = 'mixed'"
+                            >
+                                <div class="mb-3 text-4xl text-gray-300">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-14 w-14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </div>
+                                <h3 class="text-xl font-medium mb-1">Test</h3>
+                                <p class="text-gray-400 text-sm">Mix of MCQ and Descriptive</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Difficulty Selection -->
+                        <h2 class="text-xl font-semibold mb-4">Difficulty Level</h2>
+                        <div class="flex flex-wrap gap-2 mb-8">
+                            <button 
+                                @click="selectedDifficulty = 'beginner'"
+                                class="difficulty-btn" 
+                                :class="{'active': selectedDifficulty === 'beginner'}"
+                            >
+                                Beginner
+                            </button>
+                            <button 
+                                @click="selectedDifficulty = 'advanced'"
+                                class="difficulty-btn" 
+                                :class="{'active': selectedDifficulty === 'advanced'}"
+                            >
+                                Advanced
+                            </button>
+                        </div>
+                        
+                        <!-- Test Details -->
+                        <div class="mb-8 p-4 bg-gray-800 bg-opacity-50 rounded-lg">
+                            <h3 class="font-medium text-green mb-2">About This Test</h3>
+                            <template x-if="selectedTestType === 'mcq'">
+                                <div>
+                                    <p class="text-gray-300 text-sm mb-1">
+                                        <template x-if="selectedDifficulty === 'beginner'">
+                                            This will generate 15 multiple-choice questions drawing from across all selected PDFs, providing an integrated test of your knowledge.
+                                        </template>
+                                        <template x-if="selectedDifficulty === 'advanced'">
+                                            This will generate 15 challenging multiple-choice questions that analyze content from all selected PDFs together, requiring deep understanding.
+                                        </template>
+                                    </p>
+                                    <p class="text-gray-400 text-xs">Each MCQ will have 4 options with one correct answer displayed immediately after each question.</p>
+                                </div>
+                            </template>
+                            <template x-if="selectedTestType === 'long'">
+                                <div>
+                                    <p class="text-gray-300 text-sm mb-1">
+                                        <template x-if="selectedDifficulty === 'beginner'">
+                                            This will generate 10 descriptive questions covering content drawn from across all selected PDFs, integrating key concepts.
+                                        </template>
+                                        <template x-if="selectedDifficulty === 'advanced'">
+                                            This will generate 10 complex descriptive questions that require analysis of material from all selected PDFs, prompting comprehensive responses.
+                                        </template>
+                                    </p>
+                                    <p class="text-gray-400 text-xs">Answer these long-form questions in your own words. Answers are not displayed for these questions.</p>
+                                </div>
+                            </template>
+                            <template x-if="selectedTestType === 'mixed'">
+                                <div>
+                                    <p class="text-gray-300 text-sm mb-1">
+                                        <template x-if="selectedDifficulty === 'beginner'">
+                                            This will generate a mix of multiple-choice and descriptive questions at a beginner level, drawing from all selected PDFs.
+                                        </template>
+                                        <template x-if="selectedDifficulty === 'advanced'">
+                                            This will generate a mix of challenging multiple-choice and complex descriptive questions requiring deep analysis of all selected PDF content.
+                                        </template>
+                                    </p>
+                                    <p class="text-gray-400 text-xs">Both MCQs and descriptive questions will be included in this test. Answers are shown only for MCQs.</p>
+                                </div>
+                            </template>
+                        </div>
+                        
+                        <!-- Generate Button -->
+                        <button 
+                            @click="generateTest"
+                            class="w-full bg-green hover:bg-green-dark text-white font-medium py-3 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                            :disabled="selectedPDFs.length === 0"
+                        >
+                            <div class="flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                </svg>
+                                <span x-show="!isLoading">Generate Questions</span>
+                                <span x-show="isLoading">Scanning PDF Content...</span>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Generated Test Container -->
+                <div id="questionsContainer" x-show="testStarted" class="w-full h-full overflow-y-auto">
+                    <div x-show="isLoading" class="flex flex-col items-center justify-center py-12">
+                        <div class="w-12 h-12 border-t-2 border-b-2 border-green rounded-full animate-spin"></div>
+                        <p class="mt-4 text-gray-300">Analyzing PDFs and generating your test questions...</p>
+                        <p class="mt-2 text-gray-400 text-sm">This might take a moment as we're processing all content from your selected PDFs.</p>
+                    </div>
+
+                    <!-- MCQ Test Interface (only show for Test type and MCQ questions) -->
+                    <div x-show="!isLoading && testQuestions.length > 0 && selectedTestType === 'mixed'" class="max-w-4xl mx-auto px-4 py-6">
+                        <!-- PDF Info Card and Timer -->
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
+                            <!-- Selected PDF Card -->
+                            <div class="flex items-center bg-gray-800 rounded-lg px-4 py-3 shadow-md w-full sm:w-auto">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-red-500 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <span class="text-gray-200 font-medium truncate" x-text="selectedPDFs[0]?.filename || 'Selected PDF'"></span>
+                            </div>
+                            
+                            <!-- Timer -->
+                            <div class="bg-gray-800 rounded-lg px-4 py-3 shadow-md flex items-center w-full sm:w-auto justify-center sm:justify-start">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-green flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <div 
+                                    x-init="$el.__x_timer = setInterval(() => {
+                                        if (timeRemaining > 0) {
+                                            timeRemaining--;
+                                            const min = Math.floor(timeRemaining / 60);
+                                            const sec = timeRemaining % 60;
+                                            formattedTime = `${min}:${sec.toString().padStart(2, '0')}`;
+                                            
+                                            // Auto-submit when timer reaches zero
+                                            if (timeRemaining === 0) {
+                                                clearInterval($el.__x_timer);
+                                                if (!testCompleted) {
+                                                    console.log('Timer expired - auto-submitting test');
+                                                    submitTest();
+                                                }
+                                            }
+                                        }
+                                    }, 1000)" 
+                                    class="text-gray-200 font-medium"
+                                >
+                                    <span x-text="formattedTime">15:00</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Questions Container -->
+                        <div class="bg-white rounded-lg shadow-lg mb-6">
+                            <!-- Only show current page questions -->
+                            <template x-for="(question, index) in paginatedQuestions" :key="question.id">
+                                <div class="border-b border-gray-200 last:border-b-0 p-6">
+                                    <p class="text-gray-800 font-semibold mb-4" x-text="`${((currentPage-1) * questionsPerPage) + index + 1}. ${question.question}`"></p>
+                                    
+                                    <!-- MCQ Options -->
+                                    <div x-show="question.options && Array.isArray(question.options) && question.options.length > 0" class="space-y-3">
+                                        <template x-for="(option, optIndex) in question.options" :key="optIndex">
+                                            <div class="flex items-center">
+                                                <input 
+                                                    type="radio" 
+                                                    :id="`q${((currentPage-1) * questionsPerPage) + index}_opt${optIndex}`" 
+                                                    :name="`question_${((currentPage-1) * questionsPerPage) + index}`" 
+                                                    class="hidden"
+                                                    :value="optIndex"
+                                                    @change="setUserAnswer(question.id, optIndex)"
+                                                />
+                                                <label 
+                                                    :for="`q${((currentPage-1) * questionsPerPage) + index}_opt${optIndex}`" 
+                                                    class="flex items-center cursor-pointer w-full"
+                                                >
+                                                    <div 
+                                                        class="h-5 w-5 flex-shrink-0 rounded-full border border-gray-300 mr-3 flex items-center justify-center"
+                                                        :class="{'bg-blue-500 border-blue-500': getUserAnswer(question.id) === optIndex}"
+                                                    >
+                                                        <div x-show="getUserAnswer(question.id) === optIndex" class="h-2 w-2 rounded-full bg-white"></div>
+                                                    </div>
+                                                    <span class="text-gray-700" x-text="`${String.fromCharCode(65 + optIndex)}) ${option}`"></span>
+                                                </label>
+                                            </div>
+                                        </template>
+                                    </div>
+                                    
+                                    <!-- Long Answer Text Area -->
+                                    <div x-show="!question.options || !Array.isArray(question.options) || question.options.length === 0" class="mt-3">
+                                        <textarea 
+                                            :id="`q${((currentPage-1) * questionsPerPage) + index}_answer`" 
+                                            rows="4" 
+                                            class="w-full border border-gray-300 rounded-md p-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-green focus:border-transparent"
+                                            placeholder="Type your answer here..."
+                                        ></textarea>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                        
+                        <!-- Pagination and Navigation -->
+                        <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mt-8">
+                            <!-- Previous Button -->
+                            <button 
+                                @click="prevPage()" 
+                                class="flex items-center px-4 py-2 text-gray-300 hover:text-white w-full sm:w-auto justify-center sm:justify-start"
+                                :class="{'opacity-50 cursor-not-allowed': currentPage === 1}"
+                                :disabled="currentPage === 1"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                                </svg>
+                                Previous
+                            </button>
+                            
+                            <!-- Pagination -->
+                            <div class="flex space-x-2">
+                                <button 
+                                    @click="goToPage(1)" 
+                                    class="rounded-md px-3 py-1" 
+                                    :class="{'bg-green text-white': currentPage === 1, 'bg-gray-700 text-white hover:bg-gray-600': currentPage !== 1}"
+                                >
+                                    1-5
+                                </button>
+                                <button 
+                                    @click="goToPage(2)" 
+                                    class="rounded-md px-3 py-1" 
+                                    :class="{'bg-green text-white': currentPage === 2, 'bg-gray-700 text-white hover:bg-gray-600': currentPage !== 2}"
+                                    :disabled="testQuestions.length <= 5"
+                                    :class="{'opacity-50 cursor-not-allowed': testQuestions.length <= 5}"
+                                >
+                                    6-10
+                                </button>
+                                <button 
+                                    @click="goToPage(3)" 
+                                    class="rounded-md px-3 py-1" 
+                                    :class="{'bg-green text-white': currentPage === 3, 'bg-gray-700 text-white hover:bg-gray-600': currentPage !== 3}"
+                                    :disabled="testQuestions.length <= 10"
+                                    :class="{'opacity-50 cursor-not-allowed': testQuestions.length <= 10}"
+                                >
+                                    11-15
+                                </button>
+                            </div>
+                            
+                            <!-- Next Button -->
+                            <button 
+                                @click="nextPage()" 
+                                class="flex items-center px-4 py-2 text-gray-300 hover:text-white w-full sm:w-auto justify-center sm:justify-start"
+                                :class="{'opacity-50 cursor-not-allowed': currentPage === Math.ceil(testQuestions.length / questionsPerPage)}"
+                                :disabled="currentPage === Math.ceil(testQuestions.length / questionsPerPage)"
+                            >
+                                Next
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                                </svg>
+                            </button>
+                        </div>
+                        
+                        <!-- Submit Test Button -->
+                        <div class="text-center mt-8">
+                            <button 
+                                @click="submitTest()" 
+                                class="bg-green hover:bg-green-dark text-white font-bold py-3 px-6 rounded-lg shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                                :disabled="testCompleted"
+                            >
+                                <span x-show="!testCompleted">Submit Test</span>
+                                <span x-show="testCompleted">Test Submitted</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Standard Question Display (for MCQ and Long Type) -->
+                    <div x-show="!isLoading && testQuestions.length > 0 && selectedTestType !== 'mixed'" class="max-w-4xl mx-auto px-4 py-6">
+                        <div class="bg-white rounded-lg shadow-lg p-6">
+                            <h2 class="text-2xl font-bold text-gray-800 mb-6">
+                                <span x-text="selectedTestType === 'mcq' ? 'Multiple Choice Questions' : 'Long Answer Questions'"></span>
+                            </h2>
+                            
+                            <!-- Display for MCQ mode - ONLY shows MCQ questions -->
+                            <div x-show="selectedTestType === 'mcq'" class="space-y-8">
+                                <template x-for="(question, index) in testQuestions.filter(q => 
+                                    q.options && Array.isArray(q.options) && q.options.length === 4 && q.correct_answer !== undefined
+                                )" :key="question.id">
+                                    <div class="border-b border-gray-200 pb-6 mb-6 last:border-b-0 last:pb-0 last:mb-0">
+                                        <h3 class="text-lg font-bold text-gray-800 mb-3">
+                                            <span x-text="`Question ${index + 1}`"></span>
+                                        </h3>
+                                        
+                                        <p class="mb-4 text-gray-700 font-medium" x-text="question.question"></p>
+                                        
+                                        <!-- For MCQ Questions -->
+                                        <div class="ml-4">
+                                            <template x-for="(option, optIndex) in question.options" :key="optIndex">
+                                                <div class="mb-2 flex items-start" :class="{'bg-green-50 rounded-md p-1': question.correct_answer === optIndex}">
+                                                    <div class="h-5 w-5 flex items-center justify-center rounded-full bg-gray-200 text-gray-700 mr-3 mt-0.5 flex-shrink-0" 
+                                                         :class="{'bg-green-500 text-white': question.correct_answer === optIndex}">
+                                                        <span x-text="String.fromCharCode(65 + optIndex)"></span>
+                                                    </div>
+                                                    <div x-text="option" class="text-gray-700"></div>
+                                                </div>
+                                            </template>
+                                        </div>
+                                        
+                                        <!-- Source Attribution -->
+                                        <div x-show="question.source" class="mt-3 text-xs text-gray-500 italic">
+                                            <span x-text="question.source"></span>
+                                        </div>
+                                        
+                                        <!-- Answer Section -->
+                                        <div class="mt-4 pt-3 border-t border-gray-200">
+                                            <p class="font-medium text-green-600">Answer:</p>
+                                            <div class="mt-1 text-gray-700">
+                                                <span x-text="String.fromCharCode(65 + question.correct_answer) + '. ' + question.options[question.correct_answer]">
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                            
+                            <!-- Display for Long question mode -->
+                            <div x-show="selectedTestType === 'long'" class="space-y-8">
+                                <template x-for="(question, index) in testQuestions" :key="question.id">
+                                    <div class="border-b border-gray-200 pb-6 mb-6 last:border-b-0 last:pb-0 last:mb-0">
+                                        <h3 class="text-lg font-bold text-gray-800 mb-3">
+                                            <span x-text="`Question ${index + 1}`"></span>
+                                        </h3>
+                                        
+                                        <p class="mb-4 text-gray-700 font-medium" x-text="question.question"></p>
+                                        
+                                        <!-- Source Attribution -->
+                                        <div x-show="question.source" class="mt-3 text-xs text-gray-500 italic">
+                                            <span x-text="question.source"></span>
+                                        </div>
+                                        
+                                        <!-- For Long Type - Show Answer Guideline to instructor only -->
+                                        <div x-show="question.answer_guideline" class="mt-4 pt-3 border-t border-gray-200">
+                                            <p class="font-medium text-gray-700">Answer Guideline:</p>
+                                            <div class="mt-1 text-gray-600" x-text="question.answer_guideline"></div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                            
+                            <!-- Regenerate Button -->
+                            <button 
+                                @click="generateTest"
+                                class="mt-6 px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors duration-200 flex items-center"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                Generate New Questions
+                            </button>
+                            
+                            <!-- Back Button -->
+                            <button 
+                                @click="testStarted = false"
+                                class="mt-3 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200 flex items-center"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                                </svg>
+                                Back to Selection
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Error Message -->
+                    <div x-show="!isLoading && errorMessage" class="mb-6 p-4 bg-red-900 bg-opacity-50 text-red-200 rounded-lg max-w-4xl mx-auto">
+                        <p x-text="errorMessage"></p>
+                        <p class="mt-2 text-sm">Please try selecting different PDFs or check that your PDFs contain sufficient text content.</p>
+                    </div>
+
+                    <!-- No Questions Message -->
+                    <div x-show="!isLoading && !errorMessage && testQuestions.length === 0" class="text-center py-8">
+                        <svg class="mx-auto h-12 w-12 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <p class="mt-4 text-gray-400">No questions have been generated yet.</p>
+                        <p class="mt-2 text-gray-500">If you've clicked Generate and see this message, please try again or check your PDF files.</p>
+                        <button 
+                            @click="testStarted = false"
+                            class="mt-4 px-4 py-2 bg-green hover:bg-green-dark text-white rounded-lg transition-colors duration-200"
+                        >
+                            Return to Selection
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Results Modal -->
+    <div id="resultsModal" class="fixed inset-0 z-50 overflow-auto bg-black bg-opacity-75 flex items-center justify-center" style="display: none;">
+        <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-screen overflow-y-auto">
+            <!-- Modal header -->
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-2xl font-bold text-center text-gray-900">Test Results</h3>
+            </div>
+
+            <!-- Modal body -->
+            <div class="p-6">
+                <!-- Results summary -->
+                <div class="bg-gray-50 p-4 rounded-lg mb-6">
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                        <div class="p-3">
+                            <div id="result-total-score" class="text-3xl font-bold text-green">0</div>
+                            <div class="text-gray-500 text-sm">Total Score</div>
+                        </div>
+                        <div class="p-3">
+                            <div id="result-percentage" class="text-3xl font-bold text-green">0%</div>
+                            <div class="text-gray-500 text-sm">Percentage</div>
+                        </div>
+                        <div class="p-3">
+                            <div id="result-correct" class="text-3xl font-bold text-green">0</div>
+                            <div class="text-gray-500 text-sm">Correct</div>
+                        </div>
+                        <div class="p-3">
+                            <div id="result-incorrect" class="text-3xl font-bold text-red-500">0</div>
+                            <div class="text-gray-500 text-sm">Incorrect</div>
+                        </div>
+                    </div>
+                    <!-- Attempts Information -->
+                    <div class="mt-4 p-2 border-t border-gray-200 text-center">
+                        <p class="text-gray-700">
+                            <span id="result-attempted">0</span> of <span id="result-total-questions">0</span> questions attempted
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Question-wise results -->
+                <h4 class="font-semibold text-lg mb-3">Question-wise Results</h4>
+                <div id="question-results-container" class="space-y-4">
+                    <!-- Question results will be inserted here dynamically -->
+                </div>
+            </div>
+
+            <!-- Modal footer -->
+            <div class="px-6 py-4 bg-gray-50 flex justify-end space-x-3">
+                <button 
+                    type="button" 
+                    class="bg-white border border-gray-300 px-4 py-2 rounded text-gray-700 hover:bg-gray-50" 
+                    onclick="document.getElementById('resultsModal').style.display = 'none';"
+                >
+                    Close
+                </button>
+                <button 
+                    type="button" 
+                    class="bg-green hover:bg-green-dark text-white px-4 py-2 rounded" 
+                    @click="restartTest()"
+                >
+                    Take Another Test
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Alpine.js App Logic -->
+    <script>
+        function testApp() {
+            return {
+                availablePDFs: [],
+                selectedPDFs: [],
+                currentMessage: '',
+                isLoading: false,
+                testStarted: false,
+                testQuestions: [],
+                errorMessage: '',
+                currentPage: 1,
+                questionsPerPage: 5,
+                userAnswers: {}, // Store user's answer for each question
+                testCompleted: false,
+                // Test result metrics
+                totalScore: 0,
+                scorePercentage: 0,
+                correctAnswers: 0,
+                incorrectAnswers: 0,
+                totalAttempted: 0,
+                // Timer variables
+                timeRemaining: 900, // 15 minutes
+                formattedTime: '15:00',
+                
+                // Set user's answer for a specific question
+                setUserAnswer(questionId, optionIndex) {
+                    this.userAnswers[questionId] = optionIndex;
+                },
+                
+                // Get user's answer for a specific question
+                getUserAnswer(questionId) {
+                    return this.userAnswers[questionId];
+                },
+                
+                // Calculate test results
+                calculateResults() {
+                    this.correctAnswers = 0;
+                    this.incorrectAnswers = 0;
+                    let totalAttempted = 0;
+                    
+                    console.log("Calculating results based on user answers:", this.userAnswers);
+                    console.log("Total questions:", this.testQuestions.length);
+                    
+                    this.testQuestions.forEach(question => {
+                        // Skip non-MCQ questions for result calculation
+                        if (!question.options || !Array.isArray(question.options) || question.options.length === 0 || question.correct_answer === undefined) {
+                            return;
+                        }
+                        
+                        const userAnswer = this.getUserAnswer(question.id);
+                        
+                        // Only evaluate if the user attempted the question
+                        if (userAnswer !== undefined) {
+                            totalAttempted++;
+                            if (userAnswer === question.correct_answer) {
+                                this.correctAnswers++;
+                            } else {
+                                this.incorrectAnswers++;
+                            }
+                        }
+                    });
+                    
+                    this.totalScore = this.correctAnswers;
+                    
+                    // Calculate percentage based on attempted questions only
+                    this.scorePercentage = totalAttempted > 0 ? 
+                        Math.round((this.correctAnswers / totalAttempted) * 100) : 0;
+                    
+                    console.log("Result calculation complete:", {
+                        correctAnswers: this.correctAnswers,
+                        incorrectAnswers: this.incorrectAnswers,
+                        totalAttempted: totalAttempted,
+                        scorePercentage: this.scorePercentage
+                    });
+                    
+                    // Store totalAttempted for display
+                    this.totalAttempted = totalAttempted;
+                },
+                
+                // Submit the test and show results
+                submitTest() {
+                    if (this.testCompleted) return;
+                    
+                    console.log("Submitting test...");
+                    this.testCompleted = true;
+                    this.calculateResults();
+                    
+                    // Debug information
+                    console.log("Test results calculated:", {
+                        totalScore: this.totalScore,
+                        scorePercentage: this.scorePercentage,
+                        correctAnswers: this.correctAnswers,
+                        incorrectAnswers: this.incorrectAnswers,
+                        userAnswers: this.userAnswers
+                    });
+                    
+                    // Update DOM elements with result values
+                    document.getElementById('result-total-score').textContent = this.totalScore;
+                    document.getElementById('result-percentage').textContent = this.scorePercentage + '%';
+                    document.getElementById('result-correct').textContent = this.correctAnswers;
+                    document.getElementById('result-incorrect').textContent = this.incorrectAnswers;
+                    
+                    // Add information about how many questions were attempted
+                    const totalMcqs = this.testQuestions.filter(q => q.options && Array.isArray(q.options) && q.options.length > 0).length;
+                    document.getElementById('result-total-questions').textContent = totalMcqs;
+                    document.getElementById('result-attempted').textContent = this.totalAttempted || 0;
+                    
+                    // Generate question results HTML
+                    const resultsContainer = document.getElementById('question-results-container');
+                    resultsContainer.innerHTML = ''; // Clear existing content
+                    
+                    this.testQuestions.forEach((question, index) => {
+                        // Skip non-MCQ questions for result display
+                        if (!question.options || !Array.isArray(question.options) || question.options.length === 0) {
+                            return;
+                        }
+                        
+                        const userAnswer = this.getUserAnswer(question.id);
+                        const isAttempted = userAnswer !== undefined;
+                        const isCorrect = isAttempted && userAnswer === question.correct_answer;
+                        
+                        // Create question container
+                        const questionDiv = document.createElement('div');
+                        questionDiv.className = 'border-b border-gray-200 pb-4 mb-4';
+                        
+                        // Question text
+                        const questionText = document.createElement('div');
+                        questionText.className = 'flex mb-3';
+                        questionText.innerHTML = `
+                            <span class="font-semibold mr-2">${index + 1}.</span>
+                            <div class="w-full">
+                                <p class="text-gray-800">${question.question}</p>
+                                ${!isAttempted ? '<p class="text-yellow-600 text-sm mt-1">Not attempted</p>' : ''}
+                            </div>
+                        `;
+                        questionDiv.appendChild(questionText);
+                        
+                        // Options container
+                        const optionsDiv = document.createElement('div');
+                        optionsDiv.className = 'space-y-2 pl-6';
+                        
+                        // Create each option
+                        question.options.forEach((option, optIndex) => {
+                            const optionDiv = document.createElement('div');
+                            const isUserChoice = userAnswer === optIndex;
+                            const isCorrectAnswer = question.correct_answer === optIndex;
+                            
+                            // Set background color based on correctness
+                            if (isCorrectAnswer) {
+                                optionDiv.className = 'flex items-center p-1.5 rounded-md bg-green-50';
+                            } else if (isUserChoice && !isCorrectAnswer) {
+                                optionDiv.className = 'flex items-center p-1.5 rounded-md bg-red-50';
+                            } else {
+                                optionDiv.className = 'flex items-center p-1.5 rounded-md';
+                            }
+                            
+                            const letter = String.fromCharCode(65 + optIndex);
+                            
+                            // Option content
+                            optionDiv.innerHTML = `
+                                <span class="font-medium mr-2 flex-shrink-0">${letter})</span>
+                                <span class="text-gray-700">${option}</span>
+                                <div class="ml-auto flex-shrink-0">
+                                    ${isCorrectAnswer ? '<svg class="h-5 w-5 text-green" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>' : ''}
+                                    ${isUserChoice && !isCorrectAnswer ? '<svg class="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>' : ''}
+                                </div>
+                            `;
+                            
+                            optionsDiv.appendChild(optionDiv);
+                        });
+                        
+                        questionDiv.appendChild(optionsDiv);
+                        resultsContainer.appendChild(questionDiv);
+                    });
+                    
+                    // Ensure the modal is visible
+                    const resultsModal = document.getElementById('resultsModal');
+                    resultsModal.style.display = 'block';
+                    
+                    // Scroll to the top of the modal
+                    setTimeout(() => {
+                        if (resultsModal) {
+                            resultsModal.scrollTop = 0;
+                        }
+                    }, 100);
+                    
+                    console.log("Results modal should now be displayed");
+                },
+                
+                // Restart the test
+                restartTest() {
+                    console.log("Restarting test...");
+                    this.testStarted = false;
+                    this.testCompleted = false;
+                    this.testQuestions = [];
+                    this.userAnswers = {};
+                    this.currentPage = 1;
+                    this.totalAttempted = 0;
+                    
+                    // Reset result values
+                    document.getElementById('result-total-score').textContent = '0';
+                    document.getElementById('result-percentage').textContent = '0%';
+                    document.getElementById('result-correct').textContent = '0';
+                    document.getElementById('result-incorrect').textContent = '0';
+                    document.getElementById('result-total-questions').textContent = '0';
+                    document.getElementById('result-attempted').textContent = '0';
+                    document.getElementById('question-results-container').innerHTML = '';
+                    
+                    // Hide the modal
+                    document.getElementById('resultsModal').style.display = 'none';
+                },
+                
+                // Close the results modal
+                closeResults() {
+                    document.getElementById('resultsModal').style.display = 'none';
+                },
+                
+                // Get current questions based on pagination
+                get paginatedQuestions() {
+                    const start = (this.currentPage - 1) * this.questionsPerPage;
+                    const end = start + this.questionsPerPage;
+                    return this.testQuestions.slice(start, end);
+                },
+                
+                // Go to next page
+                nextPage() {
+                    const totalPages = Math.ceil(this.testQuestions.length / this.questionsPerPage);
+                    if (this.currentPage < totalPages) {
+                        this.currentPage++;
+                    }
+                },
+                
+                // Go to previous page
+                prevPage() {
+                    if (this.currentPage > 1) {
+                        this.currentPage--;
+                    }
+                },
+                
+                // Go to specific page
+                goToPage(page) {
+                    const totalPages = Math.ceil(this.testQuestions.length / this.questionsPerPage);
+                    if (page >= 1 && page <= totalPages) {
+                        this.currentPage = page;
+                    }
+                },
+                
+                init() {
+                    // Load PDFs from the server
+                    this.fetchPDFs();
+                },
+                
+                fetchPDFs() {
+                    this.isLoading = true;
+                    fetch('/pdfs')
+                        .then(response => response.json())
+                        .then(data => {
+                            this.availablePDFs = data.pdfs;
+                            this.isLoading = false;
+                        })
+                        .catch(error => {
+                            console.error('Error fetching PDFs:', error);
+                            this.isLoading = false;
+                        });
+                },
+                
+                togglePDFSelection(pdf) {
+                    const index = this.selectedPDFs.findIndex(p => p.id === pdf.id);
+                    
+                    if (index === -1) {
+                        // If not already selected and we have less than 2 PDFs selected
+                        if (this.selectedPDFs.length < 2) {
+                            this.selectedPDFs.push(pdf);
+                        }
+                    } else {
+                        // If already selected, remove it
+                        this.selectedPDFs.splice(index, 1);
+                    }
+                },
+                
+                openFileBrowser() {
+                    document.getElementById('fileInput').click();
+                },
+                
+                handleFileUpload(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    
+                    this.isLoading = true;
+                    
+                    fetch('/upload', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Refresh the PDF list
+                            this.fetchPDFs();
+                        } else {
+                            alert('Error uploading file: ' + data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Error uploading file');
+                    })
+                    .finally(() => {
+                        this.isLoading = false;
+                        // Clear the file input
+                        event.target.value = '';
+                    });
+                },
+                
+                formatFileSize(bytes) {
+                    if (bytes === 0) return '0 Bytes';
+                    const k = 1024;
+                    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                    const i = Math.floor(Math.log(bytes) / Math.log(k));
+                    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+                },
+                
+                generateTest() {
+                    if (this.selectedPDFs.length === 0) return;
+                    
+                    this.isLoading = true;
+                    this.testStarted = true;
+                    this.errorMessage = '';
+                    this.testQuestions = [];
+                    this.userAnswers = {};
+                    this.testCompleted = false;
+                    
+                    // Prepare the payload with the updated structure
+                    const payload = {
+                        pdf_ids: this.selectedPDFs.map(pdf => pdf.id),
+                        test_type: this.selectedTestType === 'mixed' ? 'mcq' : this.selectedTestType, // Force MCQ for mixed mode
+                        difficulty: this.selectedDifficulty
+                    };
+                    
+                    console.log("Sending request with payload:", payload);
+                    
+                    // Call the API to generate test questions
+                    fetch('/generate-test', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(payload)
+                    })
+                    .then(response => {
+                        console.log("Response status:", response.status);
+                        if (!response.ok) {
+                            throw new Error(`Server error: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        console.log('Test generation response:', data);
+                        
+                        if (data.success && data.questions && data.questions.length > 0) {
+                            // Store the received questions
+                            let questions = data.questions;
+                            
+                            // Give each question an ID if it doesn't have one
+                            questions = questions.map(question => {
+                                if (!question.id) {
+                                    question.id = Math.random().toString(36).substr(2, 9);
+                                }
+                                return question;
+                            });
+                            
+                            // Handle different question types based on selected test type
+                            if (this.selectedTestType === 'mcq' || this.selectedTestType === 'mixed') {
+                                // STRICT FILTER: Only include MCQs with valid options array and correct_answer
+                                const validMcqs = questions.filter(q => 
+                                    q.options && 
+                                    Array.isArray(q.options) && 
+                                    q.options.length === 4 && 
+                                    q.correct_answer !== undefined && 
+                                    q.correct_answer >= 0 && 
+                                    q.correct_answer < 4
+                                );
+                                
+                                console.log(`Filtered to ${validMcqs.length} valid MCQ questions (no long questions)`);
+                                
+                                // Ensure we have exactly 15 MCQ questions
+                                if (validMcqs.length >= 15) {
+                                    // If we have more than 15, just take the first 15
+                                    this.testQuestions = validMcqs.slice(0, 15);
+                                } else {
+                                    this.testQuestions = validMcqs;
+                                    
+                                    // If we don't have at least 5 MCQs, show an error
+                                    if (validMcqs.length < 5) {
+                                        this.errorMessage = 'Not enough valid MCQ questions could be generated. Please try with a different PDF.';
+                                    } else {
+                                        console.warn(`Only found ${validMcqs.length} valid MCQs, need 15 for MCQ mode`);
+                                    }
+                                }
+                                
+                                // Triple-check: ensure there are NO non-MCQ questions
+                                this.testQuestions.forEach(q => {
+                                    if (!q.options || !Array.isArray(q.options) || q.options.length !== 4) {
+                                        console.error("Found a non-MCQ question - removing it:", q);
+                                        this.testQuestions = this.testQuestions.filter(question => 
+                                            question.options && 
+                                            Array.isArray(question.options) && 
+                                            question.options.length === 4
+                                        );
+                                    }
+                                });
+                                
+                                console.log(`Final result: ${this.testQuestions.length} MCQ questions, with no long questions`);
+                            } else if (this.selectedTestType === 'long') {
+                                // Filter to only include long-form questions (no options)
+                                this.testQuestions = questions.filter(q => !q.options);
+                                
+                                console.log(`Found ${this.testQuestions.length} long questions for long mode`);
+                            }
+                            
+                            this.currentPage = 1;
+                            console.log(`Successfully loaded ${this.testQuestions.length} questions`);
+                            
+                            // Reset timer when new test starts
+                            this.timeRemaining = 900;
+                            this.formattedTime = '15:00';
+                            
+                            // If we got fewer than 5 questions, show an error
+                            if (this.testQuestions.length < 3) {
+                                this.errorMessage = 'Not enough questions could be generated. Please try with a different PDF that contains more content.';
+                            }
+                        } else {
+                            // Handle empty questions array or other success=true but problematic responses
+                            if (data.success && (!data.questions || data.questions.length === 0)) {
+                                this.errorMessage = 'No questions were generated. Please try again with different PDFs that contain more textual content.';
+                            } else {
+                                this.errorMessage = data.message || 'Error analyzing PDF content. Please ensure your PDF contains enough text content for question generation.';
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error generating test:', error);
+                        this.errorMessage = 'Sorry, there was an error scanning your PDF and generating your test. Please try again or try with a different PDF that contains more textual content.';
+                    })
+                    .finally(() => {
+                        this.isLoading = false;
+                        
+                        // Scroll to the top of the questions container
+                        setTimeout(() => {
+                            const container = document.getElementById('questionsContainer');
+                            if (container) {
+                                container.scrollTop = 0;
+                            }
+                        }, 100);
+                    });
+                },
+            };
+        }
+    </script>
+</body>
+</html> 

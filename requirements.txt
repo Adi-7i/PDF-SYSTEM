@@ -1,0 +1,11 @@
+fastapi==0.115.0
+uvicorn==0.24.0
+python-multipart==0.0.6
+sqlalchemy==2.0.23
+pymupdf==1.23.7
+python-dotenv==1.0.0
+pydantic==2.5.2
+numpy==1.26.2
+jinja2==3.1.2
+PyPDF2==3.0.1
+google-generativeai==0.3.1 

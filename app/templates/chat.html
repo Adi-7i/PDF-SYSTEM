@@ -1,0 +1,1565 @@
+<!DOCTYPE html>
+<html lang="en" x-data="{ showHistory: false }" x-init="">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Lucifer AI - Chat</title>
+    
+    <!-- Alpine.js via CDN -->
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/green-theme.css?v=2.0.1">
+    
+    <script>
+        // Set dark theme as default
+        document.documentElement.setAttribute('data-theme', 'dark');
+            
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dark: '#1a1a1e',
+                        green: '#4CAF50',
+                        'green-dark': '#388E3C',
+                        'green-light': '#e6f7e6'
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        /* Hide elements marked with x-cloak until Alpine.js is ready */
+        [x-cloak] { display: none !important; }
+        
+        /* Chat-specific styles */
+        .chat-bubble {
+            position: relative;
+            max-width: 80%;
+            padding: 14px 18px;
+            border-radius: 18px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08);
+            word-wrap: break-word;
+            line-height: 1.5;
+            font-size: 0.95rem;
+        }
+        
+        .user-bubble {
+            background-color: var(--green);
+            background: linear-gradient(135deg, #4CAF50, #3d9641);
+            color: #fff;
+            border-bottom-right-radius: 6px;
+            margin-left: auto;
+            text-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+        }
+        
+        .ai-bubble {
+            background-color: rgba(255, 255, 255, 0.07);
+            color: #fff;
+            border-bottom-left-radius: 6px;
+            margin-right: auto;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .timestamp {
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 4px;
+        }
+        
+        .source-info {
+            font-size: 0.8rem;
+            color: rgba(76, 175, 80, 1);
+            font-weight: 500;
+            margin-top: 6px;
+            padding: 5px 10px;
+            border-left: 3px solid rgba(76, 175, 80, 0.7);
+            background-color: rgba(76, 175, 80, 0.08);
+            border-radius: 0 6px 6px 0;
+            display: block;
+            max-width: 100%;
+            overflow-wrap: break-word;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .file-card {
+            background-color: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            border: 1px solid transparent;
+            display: flex;
+            align-items: center;
+            min-width: 0;
+        }
+        
+        .dragging {
+            border-radius: 0.5rem;
+            border: 2px dashed var(--green);
+        }
+        
+        .file-card.selected {
+            background-color: var(--green);
+            color: white;
+        }
+        
+        .selected-files {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            background-color: var(--green);
+        }
+        
+        .background {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: -1;
+        }
+        
+        .chat-container {
+            height: calc(100vh - 240px);
+            display: flex;
+            flex-direction: column;
+            border-radius: 1rem;
+            background-color: rgba(24, 24, 28, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        
+        .chat-messages {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 1.25rem;
+            padding-bottom: 1.25rem;
+            scrollbar-width: thin;
+        }
+        
+        .chat-input-container {
+            padding: 0.5rem 1rem;
+            position: relative;
+            background-color: rgba(20, 20, 22, 0.5);
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 0 0 0.75rem 0.75rem;
+            backdrop-filter: blur(5px);
+            width: 100%;
+            z-index: 10;
+        }
+        
+        .chat-input-container form {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .chat-input {
+            background-color: rgba(30, 30, 34, 0.8) !important;
+            border-radius: 1.5rem !important;
+            padding: 0.75rem 1.25rem !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            transition: all 0.2s ease;
+        }
+        
+        .chat-input:focus {
+            border-color: var(--green) !important;
+            box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2) !important;
+        }
+        
+        .send-button {
+            border-radius: 50% !important;
+            width: 42px !important;
+            height: 42px !important;
+            padding: 0 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+        
+        /* Custom scrollbar */
+        .chat-messages::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .chat-messages::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+        }
+        
+        .chat-messages::-webkit-scrollbar-thumb {
+            background-color: rgba(161, 209, 177, 0.3);
+            border-radius: 20px;
+        }
+        
+        /* Loading animation */
+        .typing-indicator {
+            display: inline-flex;
+            align-items: center;
+        }
+        
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            margin: 0 2px;
+            background-color: var(--green);
+            border-radius: 50%;
+            opacity: 0.6;
+            animation: typing-bubble 1.4s infinite both;
+        }
+        
+        .typing-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        
+        .typing-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        
+        @keyframes typing-bubble {
+            0%, 100% {
+                transform: translateY(0);
+            }
+            50% {
+                transform: translateY(-5px);
+            }
+        }
+        
+        /* Additional styles for mobile responsiveness */
+        @media (max-width: 768px) {
+            .chat-bubble {
+                max-width: 85%;
+                padding: 10px 14px;
+                margin-bottom: 8px;
+            }
+            
+            .file-card {
+                min-height: auto;
+                padding: 0.5rem;
+            }
+            
+            .chat-messages {
+                padding: 0.75rem;
+            }
+            
+            .chat-input-container {
+                padding: 0.75rem;
+            }
+            
+            .chat-input {
+                font-size: 0.9rem;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .chat-container {
+                height: calc(100vh - 180px);
+                border-radius: 0;
+                border-width: 0;
+                margin-bottom: 0;
+            }
+            
+            .chat-bubble {
+                max-width: 95%;
+                padding: 8px 12px;
+                font-size: 0.95rem;
+            }
+            
+            .pdf-selection {
+                display: flex;
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                gap: 0.5rem;
+                padding-bottom: 0.5rem;
+                -webkit-overflow-scrolling: touch;
+                margin-bottom: 0.5rem;
+                padding-right: 8px;
+            }
+            
+            .file-card {
+                flex: 0 0 auto;
+                width: 160px;
+                margin-right: 0.5rem;
+                padding: 8px;
+                border-radius: 8px;
+            }
+            
+            .selected-pdfs-container {
+                flex-direction: column;
+                padding: 0.5rem;
+            }
+            
+            h1.text-2xl {
+                font-size: 1.25rem;
+            }
+            
+            /* Improve spacing for mobile */
+            .chat-container {
+                height: calc(100vh - 250px); /* Adjust for iOS footer */
+                margin-top: 0.25rem;
+                border-width: 1px;
+            }
+            
+            .chat-input-container {
+                padding: 0.5rem;
+                position: fixed;
+                bottom: 0;
+                left: 3rem; /* Sidebar width */
+                right: 0;
+                background-color: rgba(0, 0, 0, 0.9);
+                width: calc(100% - 3rem);
+                z-index: 10;
+            }
+            
+            /* Adjust sidebar for mobile */
+            .w-16 {
+                width: 3rem;
+            }
+            
+            /* Improve message container spacing */
+            .chat-messages {
+                padding: 0.5rem;
+                overflow-y: scroll;
+                -webkit-overflow-scrolling: touch;
+            }
+            
+            /* Better handle touch interactions */
+            .chat-input {
+                font-size: 16px; /* Prevent zoom on mobile */
+                padding: 8px 12px;
+                height: 40px;
+            }
+            
+            /* Adjust file selection area */
+            .flex.flex-wrap.gap-4 {
+                gap: 0.5rem;
+            }
+            
+            /* Make AI avatar smaller on mobile */
+            .ai-avatar {
+                padding: 3px !important;
+            }
+            
+            .ai-avatar svg {
+                height: 16px;
+                width: 16px;
+            }
+            
+            .chat-bubble.ai-bubble {
+                margin-left: 0;
+            }
+            
+            /* Better touch targets for buttons */
+            .send-button {
+                padding: 8px 12px;
+                height: 40px;
+                width: 40px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            
+            /* Improve PDF cards on mobile */
+            .file-card {
+                min-height: auto;
+                padding: 8px;
+                border-radius: 8px;
+                margin-bottom: 0.5rem;
+            }
+            
+            .file-card .p-2 {
+                padding: 4px;
+            }
+            
+            .file-card .h-6, .file-card .w-6 {
+                height: 1.25rem;
+                width: 1.25rem;
+            }
+            
+            /* Fix body scrolling issues */
+            body, html {
+                overflow: hidden;
+                position: fixed;
+                height: 100%;
+                width: 100%;
+            }
+            
+            .min-h-screen {
+                height: 100%;
+                overflow: hidden;
+            }
+            
+            .flex-1.p-4 {
+                padding: 0.5rem;
+                overflow-y: auto;
+                height: 100%;
+                -webkit-overflow-scrolling: touch;
+            }
+            
+            /* Improve welcome message on mobile */
+            .welcome-message {
+                padding: 1rem;
+            }
+            
+            .welcome-icon {
+                padding: 0.75rem;
+            }
+            
+            .welcome-icon svg {
+                height: 2rem;
+                width: 2rem;
+            }
+            
+            .welcome-title {
+                font-size: 1.1rem;
+                margin-bottom: 0.5rem;
+            }
+            
+            .welcome-text {
+                font-size: 0.85rem;
+                line-height: 1.4;
+            }
+            
+            /* Improve header and title on mobile */
+            header.flex.justify-between.items-center.mb-4 {
+                margin-bottom: 0.5rem;
+            }
+            
+            /* Adjust message spacing for mobile */
+            .mb-4 {
+                margin-bottom: 0.75rem;
+            }
+            
+            /* Create better touch target for the chat input */
+            input.chat-input {
+                border-width: 1px;
+            }
+            
+            /* Improve PDF selection area */
+            .pdf-selection {
+                display: flex;
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                gap: 0.5rem;
+                padding-bottom: 0.5rem;
+                -webkit-overflow-scrolling: touch;
+                margin-bottom: 0.5rem;
+            }
+            
+            .file-icon {
+                padding: 4px !important;
+            }
+            
+            .filename {
+                font-size: 0.8rem;
+                max-width: 100px;
+            }
+            
+            .pages {
+                font-size: 0.75rem;
+            }
+            
+            .selected-checkmark {
+                padding: 2px;
+            }
+            
+            .selected-checkmark svg {
+                height: 14px;
+                width: 14px;
+            }
+            
+            /* History drawer adjustments for mobile */
+            .fixed.top-16.right-4.w-72 {
+                width: 80vw;
+                max-width: 300px;
+                top: 4.5rem;
+                right: 0.5rem;
+            }
+            
+            /* Make bottom navigation more accessible */
+            .sidebar-icon {
+                padding: 8px;
+            }
+            
+            /* Fix iOS-specific issues */
+            @supports (-webkit-touch-callout: none) {
+                .chat-container {
+                    height: calc(100vh - 260px);
+                    padding-bottom: 50px;
+                }
+                
+                .chat-input {
+                    line-height: 1.2;
+                }
+                
+                /* Prevent iOS form zoom */
+                input[type="text"], input[type="number"], textarea {
+                    font-size: 16px;
+                }
+                
+                /* Improve iOS touch targets */
+                .sidebar-icon, button, a, .file-card {
+                    -webkit-tap-highlight-color: transparent;
+                }
+                
+                /* Fix notches and safe areas */
+                @supports (padding-top: env(safe-area-inset-top)) {
+                    body {
+                        padding-top: env(safe-area-inset-top);
+                        padding-bottom: env(safe-area-inset-bottom);
+                        padding-left: env(safe-area-inset-left);
+                        padding-right: env(safe-area-inset-right);
+                    }
+                    
+                    .chat-input-container {
+                        padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+                    }
+                }
+            }
+        }
+        
+        .notification {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            padding: 0.75rem 1.25rem;
+            border-radius: 0.5rem;
+            background-color: rgba(50, 50, 50, 0.9);
+            color: white;
+            z-index: 50;
+            transform: translateX(150%);
+            transition: transform 0.3s ease;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .notification-show {
+            transform: translateX(0);
+        }
+        
+        .notification-success {
+            border-left: 4px solid #4CAF50;
+        }
+        
+        .notification-error {
+            border-left: 4px solid #EF4444;
+        }
+        
+        .notification-info {
+            border-left: 4px solid #3B82F6;
+        }
+        
+        /* Fix for iOS */
+        @supports (-webkit-touch-callout: none) {
+            /* Mobile chat improvements */
+            .chat-container {
+                border: none !important;
+                margin-bottom: 60px !important;
+            }
+            
+            /* Fix layout on iOS */
+            .chat-input-container {
+                bottom: 0 !important;
+                border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+                background-color: rgba(26, 26, 30, 0.95) !important;
+                padding: 8px !important;
+            }
+            
+            /* Fix message display */
+            .chat-messages {
+                padding-bottom: 70px !important;
+            }
+            
+            /* Fix PDF selection spacing */
+            .pdf-selection {
+                margin-bottom: 10px !important;
+            }
+            
+            .file-card {
+                margin-bottom: 8px !important;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .chat-container {
+                height: calc(100vh - 180px);
+                border-radius: 0.5rem;
+                margin: 0.5rem;
+                margin-bottom: 0.5rem;
+                width: calc(100% - 1rem);
+            }
+            
+            .chat-bubble {
+                max-width: 85%;
+                padding: 12px 16px;
+                font-size: 0.95rem;
+                margin-bottom: 8px;
+            }
+            
+            .chat-input-container {
+                border-radius: 0 0 0.5rem 0.5rem;
+                padding: 0.5rem;
+            }
+            
+            .chat-input {
+                padding: 0.5rem 1rem !important;
+                height: 40px;
+            }
+            
+            .send-button {
+                width: 38px !important;
+                height: 38px !important;
+            }
+            
+            .flex-1.p-4 {
+                padding: 0.5rem !important;
+            }
+            
+            /* Fix messages container padding */
+            .chat-messages {
+                padding: 0.75rem;
+            }
+            
+            /* Make selected PDFs more compact */
+            .selected-pdfs-container {
+                padding: 0.5rem;
+            }
+        }
+        
+        .file-info {
+            max-width: 60%;
+            min-width: 0;
+        }
+        
+        .filename {
+            font-size: 0.8rem;
+            max-width: 100px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        /* Add responsive styles for smoother transitions */
+        @media (min-width: 481px) and (max-width: 768px) {
+            .chat-container {
+                height: calc(100vh - 220px);
+                margin: 0.5rem 0;
+                border-radius: 0.75rem;
+            }
+            
+            .chat-input {
+                padding: 0.6rem 1rem !important;
+            }
+        }
+        
+        /* Fix selected PDF container for better display */
+        .selected-pdfs-container {
+            padding: 6px;
+        }
+        
+        .selected-pdfs-container > div {
+            margin-bottom: 4px;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen bg-dark">
+    <div x-data="chatApp()" class="flex min-h-screen">
+        <!-- Sidebar -->
+        <div class="w-16 bg-dark border-r border-gray-700 flex flex-col items-center py-6">
+            <a href="/dashboard" class="sidebar-icon mb-8">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+            </a>
+            
+            <a href="/dashboard" class="sidebar-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+            </a>
+            
+            <a href="/chat" class="sidebar-icon bg-green text-white">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+            </a>
+            
+            <a href="/test" class="sidebar-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+            </a>
+            
+            <a href="#" class="sidebar-icon mt-auto">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+            </a>
+        </div>
+        
+        <!-- Main Content -->
+        <div class="flex-1 p-4 md:p-6 flex flex-col">
+            <header class="flex justify-between items-center mb-4">
+                <div class="flex items-center">
+                    <h1 class="text-xl md:text-2xl font-bold text-green">Lucifer AI Chat</h1>
+                    <span class="ml-2 text-xs bg-green text-white px-2 py-0.5 rounded-full">Beta</span>
+                    <span class="ml-2 text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        PDF-Only Mode
+                    </span>
+                </div>
+                
+                <div class="flex items-center space-x-2 md:space-x-3">
+                    <button @click="showHistory = !showHistory" class="bg-dark border border-gray-700 text-gray-300 hover:text-green p-1.5 md:p-2 rounded-lg transition-colors duration-200 relative">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 md:h-5 md:w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+            </header>
+            
+            <!-- PDF Selection Section -->
+            <div class="mb-3 md:mb-6">
+                <div class="flex justify-between items-center mb-2 md:mb-3">
+                    <h2 class="text-lg font-semibold text-white">Select PDFs for Context <span class="text-sm text-gray-400">(Up to 2)</span></h2>
+                </div>
+                
+                <!-- PDF File Cards -->
+                <div class="pdf-selection flex flex-wrap gap-4">
+                    <template x-for="file in availableFiles" :key="file.id">
+                        <div 
+                            class="file-card p-3 cursor-pointer flex items-center" 
+                            :class="{'selected': isFileSelected(file)}"
+                            @click="toggleFileSelection(file)"
+                        >
+                            <div class="p-2 bg-green bg-opacity-10 rounded-lg mr-3 file-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                            </div>
+                            <div class="file-info flex-1 min-w-0">
+                                <p class="font-medium text-white filename truncate" x-text="file.name"></p>
+                                <p class="text-sm text-gray-400 pages" x-text="`${file.pages} pages`"></p>
+                            </div>
+                            <div class="ml-auto" x-show="isFileSelected(file)">
+                                <div class="bg-green rounded-full p-1 selected-checkmark">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                    
+                    <!-- Empty state when no PDFs are available -->
+                    <div x-show="availableFiles.length === 0" class="w-full text-center py-6 bg-dark bg-opacity-30 rounded-lg border border-gray-700">
+                        <div class="bg-green bg-opacity-10 p-3 rounded-full inline-flex mb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                        </div>
+                        <p class="text-gray-400">No PDFs available. Upload a PDF file to get started.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Chat Container -->
+            <div class="chat-container bg-dark bg-opacity-50 border border-gray-800 rounded-xl flex flex-col">
+                <!-- Selected PDFs Display -->
+                <div class="selected-pdfs-container p-3 border-b border-gray-700 flex flex-wrap gap-2" x-show="selectedFiles.length > 0">
+                    <template x-for="file in selectedFiles" :key="file.id">
+                        <div class="bg-green bg-opacity-10 rounded-lg px-3 py-1 flex items-center">
+                            <span class="text-green text-sm mr-2 truncate max-w-[150px]" x-text="file.name"></span>
+                            <button @click.stop="removeFile(file)" class="text-gray-400 hover:text-red-400 flex-shrink-0">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    </template>
+                </div>
+                
+                <!-- Chat Messages -->
+                <div class="chat-messages flex-grow overflow-y-auto" x-ref="chatMessages">
+                    <!-- Welcome message when no messages -->
+                    <div x-show="messages.length === 0" class="welcome-message flex flex-col items-center justify-center h-full text-center p-6">
+                        <div class="bg-green bg-opacity-10 p-4 rounded-full mb-4 welcome-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-green" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                            </svg>
+                        </div>
+                        <h3 class="text-xl font-medium text-white mb-2 welcome-title">Ask me anything about your documents</h3>
+                        <p class="text-gray-400 max-w-md welcome-text">Select up to two PDFs and start chatting. I'll help you understand your documents and answer your questions.</p>
+                    </div>
+                    
+                    <!-- Message bubbles -->
+                    <template x-for="(message, index) in messages" :key="index">
+                        <div :class="{'mb-4': true}">
+                            <!-- User Message -->
+                            <template x-if="message.type === 'user'">
+                                <div>
+                                    <div class="chat-bubble user-bubble">
+                                        <p class="break-words" x-html="formatMessageText(message.text)"></p>
+                                    </div>
+                                    <div class="timestamp text-right" x-text="message.timestamp"></div>
+                                </div>
+                            </template>
+                            
+                            <!-- AI Message -->
+                            <template x-if="message.type === 'ai'">
+                                <div>
+                                    <div class="flex items-start">
+                                        <div class="p-1 bg-green bg-opacity-10 rounded-lg mr-2 mt-1 flex-shrink-0 ai-avatar">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-green" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                            </svg>
+                                        </div>
+                                        <div class="flex-grow min-w-0">
+                                            <div class="chat-bubble ai-bubble">
+                                                <p class="break-words" x-html="formatMessageText(message.text)"></p>
+                                            </div>
+                                            <div class="flex flex-col mt-1">
+                                                <div class="timestamp" x-text="message.timestamp"></div>
+                                                <template x-if="message.source">
+                                                    <div class="source-info mt-1" x-html="formatSourceInfo(message.source)"></div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                    
+                    <!-- Loading indicator -->
+                    <div x-show="isLoading" class="flex justify-start mt-4 mb-2">
+                        <div class="chat-bubble ai-bubble !py-2">
+                            <div class="typing-indicator">
+                                <div class="typing-dot"></div>
+                                <div class="typing-dot"></div>
+                                <div class="typing-dot"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Chat Input -->
+                <div class="chat-input-container border-t border-gray-800 p-4">
+                    <form @submit.prevent="sendMessage" class="flex">
+                        <input 
+                            type="text" 
+                            class="flex-grow bg-dark bg-opacity-50 text-white placeholder-gray-400 border border-gray-700 rounded-l-lg px-4 py-2 focus:outline-none focus:ring-1 focus:ring-green chat-input"
+                            placeholder="Type your message..."
+                            x-model="currentMessage"
+                            :disabled="isLoading || selectedFiles.length === 0"
+                            autocomplete="off"
+                            autocorrect="on"
+                            autocapitalize="sentences"
+                        >
+                        <button 
+                            type="submit" 
+                            class="bg-green text-white rounded-r-lg px-4 py-2 hover:bg-green-dark focus:outline-none focus:ring-1 focus:ring-green-dark send-button"
+                            :disabled="isLoading || !currentMessage.trim() || selectedFiles.length === 0"
+                            :class="{'opacity-50': isLoading || !currentMessage.trim() || selectedFiles.length === 0}"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                            </svg>
+                        </button>
+                    </form>
+                    
+                    <!-- Error message with close button -->
+                    <div x-show="errorMessage" class="mt-2 flex items-center justify-between">
+                        <p class="text-red-400 text-sm flex-1" x-text="errorMessage"></p>
+                        <button @click="clearError()" class="text-gray-500 hover:text-gray-300 ml-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <!-- Helper text when no PDF is selected -->
+                    <div x-show="selectedFiles.length === 0 && availableFiles.length > 0" class="mt-2 text-gray-400 text-sm">
+                        Please select at least one PDF to start chatting
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- History Drawer -->
+    <div x-show="showHistory" 
+         x-cloak
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0 transform scale-95"
+         x-transition:enter-end="opacity-100 transform scale-100"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100 transform scale-100"
+         x-transition:leave-end="opacity-0 transform scale-95"
+         @click.away="showHistory = false"
+         class="fixed top-16 right-4 w-72 bg-dark border border-gray-700 rounded-lg shadow-xl p-4 z-50">
+        
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-white font-medium">Chat History</h3>
+            <button @click="showHistory = false" class="text-gray-400 hover:text-white">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        
+        <div class="max-h-64 overflow-y-auto">
+            <template x-if="chatHistory && chatHistory.length > 0">
+                <div>
+                    <template x-for="(chat, index) in chatHistory" :key="index">
+                        <div class="p-3 mb-2 rounded bg-gray-800 hover:bg-gray-700 cursor-pointer group" @click="loadChat(chat)">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <p class="text-sm text-white font-medium" x-text="chat.title || 'Chat Session'"></p>
+                                    <p class="text-xs text-gray-400" x-text="chat.date"></p>
+                                    <p class="text-xs text-green mt-1" x-text="chat.sources || ''"></p>
+                                </div>
+                                <button @click.stop="deleteHistory(index)" class="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </template>
+            
+            <template x-if="!chatHistory || chatHistory.length === 0">
+                <div class="text-center py-4">
+                    <p class="text-gray-400 text-sm">No chat history yet</p>
+                </div>
+            </template>
+        </div>
+        
+        <button @click="clearAllHistory" class="w-full mt-3 py-2 bg-gray-700 text-white text-sm rounded hover:bg-gray-600">
+            Clear All History
+        </button>
+    </div>
+
+    <script>
+        function chatApp() {
+            return {
+                messages: [],
+                currentMessage: "",
+                isLoading: false,
+                availableFiles: [],
+                selectedFiles: [],
+                chatHistory: [],
+                errorMessage: "",
+                
+                init() {
+                    this.fetchAvailableFiles();
+                    
+                    // Load chat history from local storage
+                    const savedHistory = localStorage.getItem('lucifer_chat_history');
+                    if (savedHistory) {
+                        try {
+                            this.chatHistory = JSON.parse(savedHistory);
+                        } catch (e) {
+                            console.error("Error loading chat history:", e);
+                            this.chatHistory = [];
+                        }
+                    }
+                },
+                
+                fetchAvailableFiles() {
+                    fetch('/pdfs')
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                this.availableFiles = data.pdfs;
+                                // Force refresh PDF metadata to get latest page counts
+                                this.refreshPdfMetadata();
+                            } else {
+                                console.error("Error fetching PDFs:", data.message);
+                            }
+                        })
+                        .catch(error => {
+                            console.error("Error fetching available files:", error);
+                        });
+                },
+                
+                refreshPdfMetadata() {
+                    // Get fresh metadata for each PDF to ensure page counts are accurate
+                    if (this.availableFiles && this.availableFiles.length > 0) {
+                        this.availableFiles.forEach(file => {
+                            fetch(`/pdf/${file.id}/info`)
+                                .then(response => response.json())
+                                .then(data => {
+                                    if (data.success && data.pages) {
+                                        // Update the file's page count in our local array
+                                        const index = this.availableFiles.findIndex(f => f.id === file.id);
+                                        if (index !== -1) {
+                                            this.availableFiles[index].pages = data.pages;
+                                        }
+                                    }
+                                })
+                                .catch(error => {
+                                    console.error(`Error refreshing metadata for PDF ${file.id}:`, error);
+                                });
+                        });
+                    }
+                },
+                
+                // Format message text with code highlighting
+                formatMessageText(text) {
+                    if (!text) return '';
+                    
+                    // First escape the HTML to prevent XSS
+                    let processedText = this.escapeHtml(text);
+                    
+                    // Flag to track if we're inside a code block
+                    let insideCodeBlock = false;
+                    
+                    // Process text line by line
+                    let lines = processedText.split('\n');
+                    let result = [];
+                    
+                    let codeBlockContent = '';
+                    
+                    // Process each line
+                    for (let i = 0; i < lines.length; i++) {
+                        const line = lines[i];
+                        
+                        // Check for code block delimiters
+                        if (line.trim().startsWith('```')) {
+                            insideCodeBlock = !insideCodeBlock;
+                            
+                            if (insideCodeBlock) {
+                                // Starting a code block
+                                codeBlockContent = '';
+                            } else {
+                                // Ending a code block, add it to result
+                                result.push(`<div class="bg-gray-800 p-3 my-2 rounded-md overflow-x-auto"><pre><code class="text-green-light">${codeBlockContent.trim()}</code></pre></div>`);
+                            }
+                            continue;
+                        }
+                        
+                        // Handle content based on whether we're in a code block
+                        if (insideCodeBlock) {
+                            codeBlockContent += line + '\n';
+                        } else {
+                            // Process regular text
+                            let processedLine = line;
+                            
+                            // Bold formatting with **text**
+                            processedLine = processedLine.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                            
+                            // Italic formatting with *text*
+                            processedLine = processedLine.replace(/\*(.*?)\*/g, '<em>$1</em>');
+                            
+                            // Handle bullet points
+                            if (processedLine.trim().startsWith('- ')) {
+                                processedLine = '<li>' + processedLine.trim().substring(2) + '</li>';
+                            }
+                            
+                            result.push(processedLine);
+                        }
+                    }
+                    
+                    // Join lines and handle lists
+                    processedText = result.join('<br>');
+                    
+                    // Wrap lists in <ul> tags
+                    if (processedText.includes('<li>')) {
+                        processedText = processedText.replace(/(<li>.*?<\/li>)+/g, '<ul class="list-disc ml-5 my-2">$&</ul>');
+                    }
+                    
+                    return processedText;
+                },
+                
+                // Escape HTML to prevent XSS
+                escapeHtml(unsafe) {
+                    return unsafe
+                        .replace(/&/g, "&amp;")
+                        .replace(/</g, "&lt;")
+                        .replace(/>/g, "&gt;")
+                        .replace(/"/g, "&quot;")
+                        .replace(/'/g, "&#039;");
+                },
+                
+                // Load chat history from localStorage
+                loadChatHistory() {
+                    try {
+                        const history = localStorage.getItem('chatHistory');
+                        if (history) {
+                            this.chatHistory = JSON.parse(history);
+                        } else {
+                            this.chatHistory = [];
+                        }
+                    } catch (error) {
+                        console.error('Error loading chat history:', error);
+                        this.chatHistory = [];
+                    }
+                },
+                
+                // Save chat history to localStorage
+                saveChatHistory() {
+                    try {
+                        localStorage.setItem('chatHistory', JSON.stringify(this.chatHistory));
+                    } catch (error) {
+                        console.error('Error saving chat history:', error);
+                    }
+                },
+                
+                // Delete a chat history entry
+                deleteHistory(index) {
+                    this.chatHistory.splice(index, 1);
+                    this.saveChatHistory();
+                },
+                
+                // Clear all chat history
+                clearAllHistory() {
+                    if (confirm('Are you sure you want to clear all chat history?')) {
+                        this.chatHistory = [];
+                        this.saveChatHistory();
+                    }
+                },
+                
+                // File selection toggle
+                toggleFileSelection(file) {
+                    if (this.isFileSelected(file)) {
+                        this.selectedFiles = this.selectedFiles.filter(f => f.id !== file.id);
+                    } else {
+                        if (this.selectedFiles.length < 2) {
+                            this.selectedFiles.push(file);
+                        }
+                    }
+                },
+                
+                // Check if a file is selected
+                isFileSelected(file) {
+                    return this.selectedFiles.some(f => f.id === file.id);
+                },
+                
+                // Send message
+                async sendMessage() {
+                    if (!this.currentMessage.trim() || this.isLoading || this.selectedFiles.length === 0) {
+                        return;
+                    }
+                    
+                    const message = this.currentMessage.trim();
+                    this.currentMessage = '';
+                    this.errorMessage = '';
+                    
+                    // Initialize messages array if it doesn't exist
+                    if (!Array.isArray(this.messages)) {
+                        this.messages = [];
+                    }
+                    
+                    try {
+                        // Add user message to chat
+                        this.messages.push({
+                            type: 'user',
+                            text: message,
+                            timestamp: this.formatTimestamp(new Date())
+                        });
+                        
+                        this.scrollToBottom();
+                        
+                        // Get AI response
+                        await this.getAIResponse(message);
+                    } catch (error) {
+                        console.error("Error sending message:", error);
+                        this.errorMessage = "Error sending message. Please try again.";
+                    }
+                },
+                
+                // Get AI response
+                async getAIResponse(message) {
+                    this.isLoading = true;
+                    this.errorMessage = '';
+                    
+                    try {
+                        // Prepare request data
+                        let requestData = {
+                            question: message,
+                            conversation_history: this.messages.map(msg => ({
+                                role: msg.type === 'user' ? 'user' : 'assistant',
+                                content: msg.text
+                            })),
+                            strict_pdf_only: true,
+                            use_strict_citations: true,
+                            include_source_details: true,
+                            track_source_pdf: true,
+                            allow_gemini_generation: false,
+                            system_prompt: "CRITICAL INSTRUCTION: You are an AI assistant that MUST ONLY use content from the uploaded PDF files to answer questions. For EVERY response without exception, follow these rules: 1) Search ONLY within the uploaded PDFs for answers. 2) NEVER generate content that's not in the PDFs. 3) At the END of EVERY response, you MUST include this format exactly: 'Source: [EXACT PDF FILENAME], Page [PAGE NUMBER(S)]'. 4) If information spans multiple pages, list ALL page numbers. 5) If information comes from multiple PDFs, cite EACH PDF with its corresponding page numbers separately. 6) If the answer cannot be found in the PDFs, clearly state this fact and do not make up information. 7) ALWAYS provide the EXACT PDF filename that contains the information. This strict citation is required so users can verify information in their local PDF copies."
+                        };
+                        
+                        if (this.selectedFiles.length === 1) {
+                            requestData.pdf_id = this.selectedFiles[0].id;
+                        }
+                        
+                        // Create a single function to handle responses to avoid duplicate code
+                        const processApiResponse = async (endpoint, data) => {
+                            try {
+                                const controller = new AbortController();
+                                const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout to match server
+                                
+                                const response = await fetch(endpoint, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify(data),
+                                    cache: 'no-cache',
+                                    signal: controller.signal
+                                });
+                                
+                                clearTimeout(timeoutId);
+                                
+                                if (!response.ok) {
+                                    throw new Error(`Server responded with status: ${response.status}`);
+                                }
+                                
+                                return await response.json();
+                            } catch (error) {
+                                console.error("API fetch error:", error);
+                                throw error;
+                            }
+                        };
+                        
+                        // Make the API call with retries
+                        const maxRetries = 3;
+                        let result = null;
+                        let error = null;
+                        
+                        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                            try {
+                                result = await processApiResponse('/ask-ai', requestData);
+                                if (result && result.success) {
+                                    break;
+                                }
+                                
+                                await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+                            } catch (err) {
+                                error = err;
+                                console.error(`Attempt ${attempt}/${maxRetries} failed:`, err);
+                                if (attempt < maxRetries) {
+                                    await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+                                }
+                            }
+                        }
+                        
+                        if (result && result.success) {
+                            // Extract source information if available
+                            let answerText = result.answer;
+                            let sourceInfo = '';
+                            
+                            // Parse source information from the answer if embedded
+                            // Try to detect and extract page/section information from the answer itself
+                            const sourceRegex = /(Source|References?|From)[\s:]+((?:[^,\.]+\.pdf|[^,\.]+(?:\.pdf)?)(?:,\s*|\s+|$))(?:(page|pages|pg\.?|p\.?)[\s:]*([\d\s,\-&]+))?/i;
+                            
+                            // Also look for multiple source formats
+                            const multiSourceRegex = /(Source|References?|From)[s]?[\s:]+((?:[^\.]+\.pdf|[^,\.]+)(?:,\s*|\s+))?(?:(page|pages|pg\.?|p\.?)[\s:]*([\d\s,\-&]+))/gi;
+                            
+                            // First try to match with the main regex
+                            const sourceMatch = answerText.match(sourceRegex);
+                            let allMatches = [];
+                            let multipleSourcesFound = false;
+                            
+                            // Then check for multiple sources
+                            let match;
+                            while ((match = multiSourceRegex.exec(answerText)) !== null) {
+                                allMatches.push(match);
+                                multipleSourcesFound = true;
+                            }
+                            
+                            if (sourceMatch) {
+                                // If source info is found in the text, extract it and clean the answer
+                                sourceInfo = 'Source: ';
+                                
+                                // Add PDF name if found
+                                if (sourceMatch[2]) {
+                                    sourceInfo += sourceMatch[2].trim();
+                                    if (!sourceInfo.endsWith(',')) {
+                                        sourceInfo += ', ';
+                                    } else {
+                                        sourceInfo += ' ';
+                                    }
+                                }
+                                
+                                // Add page numbers if found
+                                if (sourceMatch[4]) {
+                                    sourceInfo += `Page${sourceMatch[4].includes(',') ? 's' : ''} ${sourceMatch[4]}`;
+                                    
+                                    // Add section if found
+                                    if (sourceMatch[6]) {
+                                        sourceInfo += `, Section: ${sourceMatch[6].trim()}`;
+                                    }
+                                }
+                                
+                                // Remove the source info from the main answer
+                                answerText = answerText.replace(/\s*((Source|References?|From)[\s:]+([^\.]+)\.?)\s*$/i, '').trim();
+                            }
+                            
+                            if (multipleSourcesFound && allMatches.length > 0) {
+                                // If we have multiple sources
+                                sourceInfo = '';
+                                for (let i = 0; i < allMatches.length; i++) {
+                                    const m = allMatches[i];
+                                    if (i > 0) sourceInfo += '\n';
+                                    
+                                    sourceInfo += 'Source: ';
+                                    
+                                    // Add PDF name if found
+                                    if (m[2]) {
+                                        sourceInfo += m[2].trim();
+                                        if (!sourceInfo.endsWith(',')) {
+                                            sourceInfo += ', ';
+                                        } else {
+                                            sourceInfo += ' ';
+                                        }
+                                    }
+                                    
+                                    // Add page numbers
+                                    if (m[4]) {
+                                        sourceInfo += `Page${m[4].includes(',') ? 's' : ''} ${m[4]}`;
+                                    }
+                                }
+                                
+                                // Remove all source references from the text
+                                answerText = answerText.replace(/\s*((Source|References?|From)[s]?[\s:]+([^\.]+)\.?)\s*$/ig, '').trim();
+                            } 
+                            else if (sourceMatch) {
+                                // If single source is found
+                                sourceInfo = 'Source: ';
+                                
+                                // Add PDF name if found - Make sure PDF name is clearly visible
+                                if (sourceMatch[2]) {
+                                    sourceInfo += sourceMatch[2].trim();
+                                    if (!sourceInfo.endsWith(',')) {
+                                        sourceInfo += ', ';
+                                    } else {
+                                        sourceInfo += ' ';
+                                    }
+                                }
+                                
+                                // Add page numbers if found
+                                if (sourceMatch[4]) {
+                                    sourceInfo += `Page${sourceMatch[4].includes(',') ? 's' : ''} ${sourceMatch[4]}`;
+                                }
+                                
+                                // Remove the source info from the main answer
+                                answerText = answerText.replace(/\s*((Source|References?|From)[\s:]+([^\.]+)\.?)\s*$/i, '').trim();
+                            }
+                            
+                            // If no source info was found in the text, use API-provided information
+                            if (!sourceInfo) {
+                                if (result.page_numbers && result.page_numbers.length > 0) {
+                                    // If we have specific page numbers from the API response
+                                    sourceInfo = `Source: `;
+                                    
+                                    // Add PDF name
+                                    if (result.source_pdf) {
+                                        sourceInfo += `${result.source_pdf}, `;
+                                    } else if (result.source_file_id && this.selectedFiles.length > 0) {
+                                        // Try to find the file name by ID
+                                        const sourceFile = this.selectedFiles.find(f => f.id === result.source_file_id);
+                                        if (sourceFile) {
+                                            sourceInfo += `${sourceFile.name}, `;
+                                        }
+                                    } else if (this.selectedFiles.length === 1) {
+                                        // If only one file is selected, use that PDF name
+                                        sourceInfo += `${this.selectedFiles[0].name}, `;
+                                    }
+                                    
+                                    // Add page numbers
+                                    sourceInfo += `Page${result.page_numbers.length > 1 ? 's' : ''} ${result.page_numbers.join(', ')}`;
+                                    
+                                    // Add section information if available
+                                    if (result.sections && result.sections.length > 0) {
+                                        sourceInfo += `, Section${result.sections.length > 1 ? 's' : ''}: ${result.sections.join(', ')}`;
+                                    }
+                                } else if (result.source_pdf) {
+                                    // If we only have the PDF name but no page numbers
+                                    sourceInfo = `Source: ${result.source_pdf}`;
+                                } else if (result.sources) {
+                                    // Use direct sources information if provided
+                                    sourceInfo = `Source: ${result.sources}`;
+                                } else if (this.selectedFiles.length === 1) {
+                                    // If only one file is selected, use that as the source
+                                    sourceInfo = `Source: ${this.selectedFiles[0].name}`;
+                                }
+                            }
+                            
+                            this.messages.push({
+                                type: 'ai',
+                                text: answerText,
+                                timestamp: this.formatTimestamp(new Date()),
+                                source: sourceInfo
+                            });
+                            
+                            // Clear any previous error messages
+                            this.errorMessage = '';
+                            
+                            // Update history and scroll
+                            this.scrollToBottom();
+                            this.updateChatHistory();
+                        } else if (result) {
+                            this.errorMessage = result.message || 'Failed to get response from server';
+                        } else if (error) {
+                            this.errorMessage = `Network error: ${error.message}. Please check your connection.`;
+                        } else {
+                            this.errorMessage = 'Failed to get response after multiple attempts';
+                        }
+                    } catch (error) {
+                        console.error('Error in getAIResponse:', error);
+                        this.errorMessage = 'Error processing request: ' + error.message;
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+                
+                // Update chat history with the latest messages
+                updateChatHistory() {
+                    try {
+                        // Create a safe copy of messages
+                        const messagesCopy = Array.isArray(this.messages) ? [...this.messages] : [];
+                        
+                        // If this is the first message exchange (at least one user and one AI message)
+                        if (messagesCopy.length >= 2) {
+                            const userMsgs = messagesCopy.filter(m => m && m.type === 'user');
+                            const firstMsg = userMsgs.length > 0 ? userMsgs[0].text : "Chat Session";
+                            
+                            // Check if we need to create a new chat history entry or update existing
+                            if (!Array.isArray(this.chatHistory)) {
+                                this.chatHistory = [];
+                            }
+                            
+                            if (this.chatHistory.length === 0) {
+                                // Create new entry
+                                this.chatHistory.unshift({
+                                    title: firstMsg.length > 30 ? firstMsg.substring(0, 30) + '...' : firstMsg,
+                                    date: new Date().toLocaleDateString(),
+                                    sources: this.selectedFiles.map(file => file.name).join(', '),
+                                    messages: JSON.parse(JSON.stringify(messagesCopy))
+                                });
+                            } else {
+                                // Update first entry
+                                this.chatHistory[0].messages = JSON.parse(JSON.stringify(messagesCopy));
+                            }
+                            
+                            // Save to localStorage
+                            this.saveChatHistory();
+                        }
+                    } catch (error) {
+                        console.error("Error updating chat history:", error);
+                        // Don't show this error to user as it's not critical
+                    }
+                },
+                
+                // Format timestamp
+                formatTimestamp(date) {
+                    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                },
+                
+                // Scroll to bottom of chat
+                scrollToBottom() {
+                    setTimeout(() => {
+                        const chatContainer = this.$refs.chatMessages;
+                        if (chatContainer) {
+                            chatContainer.scrollTop = chatContainer.scrollHeight;
+                        }
+                    }, 100);
+                    
+                    // Add additional scroll for mobile devices with delay
+                    setTimeout(() => {
+                        const chatContainer = this.$refs.chatMessages;
+                        if (chatContainer) {
+                            chatContainer.scrollTop = chatContainer.scrollHeight + 500;
+                            
+                            // Extra scroll for mobile Safari
+                            window.scrollTo(0, document.body.scrollHeight);
+                        }
+                    }, 300);
+                },
+                
+                // Load a previous chat
+                loadChat(chat) {
+                    try {
+                        if (chat && chat.messages && chat.messages.length > 0) {
+                            this.messages = JSON.parse(JSON.stringify(chat.messages));
+                            this.scrollToBottom();
+                        }
+                        
+                        // Set using Alpine.js variable from parent scope
+                        showHistory = false;
+                    } catch (error) {
+                        console.error('Error loading chat:', error);
+                        this.errorMessage = 'Error loading chat history. Please try again.';
+                    }
+                },
+                
+                // Clear error message
+                clearError() {
+                    this.errorMessage = '';
+                },
+
+                showNotification(message, type = 'info') {
+                    // Simple notification element creation
+                    const notification = document.createElement('div');
+                    notification.className = `notification notification-${type}`;
+                    notification.textContent = message;
+                    
+                    document.body.appendChild(notification);
+                    
+                    setTimeout(() => {
+                        notification.classList.add('notification-show');
+                    }, 10);
+                    
+                    setTimeout(() => {
+                        notification.classList.remove('notification-show');
+                        setTimeout(() => {
+                            notification.remove();
+                        }, 300);
+                    }, 3000);
+                },
+
+                formatSourceInfo(source) {
+                    if (!source) return '';
+                    
+                    // If the source has multiple lines, format them nicely
+                    if (source.includes('\n')) {
+                        const lines = source.split('\n');
+                        return lines.map((line, index) => {
+                            // Format the line
+                            if (line.startsWith('Source:')) {
+                                // Highlight the PDF name in bold
+                                const parts = line.split(',');
+                                if (parts.length > 1) {
+                                    const pdfName = parts[0].replace('Source:', '').trim();
+                                    return `<strong>${parts[0]}</strong>${parts.slice(1).join(',')}`;
+                                }
+                            }
+                            return line;
+                        }).join('<br>');
+                    }
+                    
+                    // For a single source, highlight the PDF name
+                    if (source.startsWith('Source:')) {
+                        const parts = source.split(',');
+                        if (parts.length > 1) {
+                            const firstPart = `<strong>${parts[0]}</strong>`;
+                            return `${firstPart}, ${parts.slice(1).join(',')}`;
+                        }
+                    }
+                    
+                    return source;
+                }
+            };
+        }
+    </script>
+</body>
+</html> 

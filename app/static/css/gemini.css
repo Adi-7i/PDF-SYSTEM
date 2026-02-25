@@ -1,0 +1,163 @@
+/* Gemini AI Styling */
+
+/* AI Badge */
+.ai-badge {
+    display: inline-block;
+    background-color: #4285F4; /* Google Blue */
+    color: white;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    margin-bottom: 10px;
+}
+
+/* AI Answer Container */
+.ai-answer {
+    border-left: 4px solid #4285F4;
+    padding-left: 15px;
+    position: relative;
+}
+
+/* Keywords */
+.ai-keywords {
+    margin-top: 15px;
+    padding: 8px 12px;
+    background-color: rgba(66, 133, 244, 0.1);
+    border-radius: 8px;
+}
+
+.keyword-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 5px;
+}
+
+.keyword-badge {
+    display: inline-block;
+    background-color: white;
+    border: 1px solid #4285F4;
+    color: #4285F4;
+    padding: 3px 10px;
+    border-radius: 15px;
+    font-size: 0.85rem;
+}
+
+/* AI Summary Content */
+.ai-summary-container {
+    padding: 15px;
+}
+
+.ai-summary-content {
+    background-color: rgba(255, 255, 255, 0.7);
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.ai-summary-text {
+    line-height: 1.6;
+}
+
+.ai-summary-text h3 {
+    color: #4285F4;
+    margin-top: 20px;
+    margin-bottom: 10px;
+    font-size: 1.3rem;
+}
+
+.ai-summary-text h4 {
+    color: #0F9D58; /* Google Green */
+    margin-top: 15px;
+    margin-bottom: 8px;
+    font-size: 1.15rem;
+}
+
+.ai-summary-text h5 {
+    color: #F4B400; /* Google Yellow */
+    margin-top: 12px;
+    margin-bottom: 6px;
+    font-size: 1.05rem;
+}
+
+.ai-summary-text ul {
+    margin-bottom: 15px;
+}
+
+.ai-summary-text li {
+    margin-bottom: 5px;
+}
+
+.ai-metadata {
+    color: #666;
+    font-size: 0.85rem;
+    margin-top: 20px;
+    padding-top: 10px;
+    border-top: 1px solid #eee;
+}
+
+/* Comparison Container */
+#comparisonContainer {
+    background-color: rgba(255, 255, 255, 0.7);
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+#comparisonContainer h4 {
+    color: #333;
+}
+
+#comparisonContainer .card-header {
+    font-weight: 600;
+}
+
+#comparisonContainer .card:first-child .card-header {
+    background-color: rgba(66, 133, 244, 0.1);
+    border-bottom: 2px solid #4285F4;
+}
+
+#comparisonContainer .card:last-child .card-header {
+    background-color: rgba(219, 68, 55, 0.1); /* Google Red */
+    border-bottom: 2px solid #DB4437;
+}
+
+/* Form Switch */
+.form-check-input:checked {
+    background-color: #4285F4;
+    border-color: #4285F4;
+}
+
+/* Loading Animation */
+@keyframes pulse-blue {
+    0% {
+        box-shadow: 0 0 0 0 rgba(66, 133, 244, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(66, 133, 244, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(66, 133, 244, 0);
+    }
+}
+
+#aiSummaryLoading .spinner-border {
+    color: #4285F4;
+    animation: pulse-blue 2s infinite;
+}
+
+/* Responsive Styles */
+@media (max-width: 768px) {
+    .keyword-list {
+        gap: 5px;
+    }
+    
+    .keyword-badge {
+        font-size: 0.8rem;
+        padding: 2px 8px;
+    }
+    
+    .ai-summary-content {
+        padding: 15px;
+    }
+} 

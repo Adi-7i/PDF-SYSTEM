@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Lucifer AI - Study Companion</title>
+    
+    <!-- Alpine.js via CDN -->
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/green-theme.css?v=2.0.1">
+    
+    <script>
+        // Set dark theme as default
+        document.documentElement.setAttribute('data-theme', 'dark');
+            
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dark: '#1a1a1e',
+                        green: '#4CAF50',
+                        'green-dark': '#388E3C',
+                        'green-light': '#e6f7e6'
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        /* Base styles moved to green-theme.css */
+        
+        /* Additional notification styles */
+        .notification {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            padding: 0.75rem 1.25rem;
+            border-radius: 0.5rem;
+            background-color: rgba(50, 50, 50, 0.9);
+            color: white;
+            z-index: 50;
+            transform: translateX(150%);
+            transition: transform 0.3s ease;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .notification-show {
+            transform: translateX(0);
+        }
+        
+        .notification-success {
+            border-left: 4px solid #4CAF50;
+        }
+        
+        .notification-error {
+            border-left: 4px solid #EF4444;
+        }
+        
+        .notification-info {
+            border-left: 4px solid #3B82F6;
+        }
+        
+        /* Drag and drop styles */
+        .dragging {
+            border-color: #e6f7e6 !important;
+            background-color: rgba(76, 175, 80, 0.15) !important;
+            transform: scale(1.02);
+        }
+        
+        /* Mobile responsive styles */
+        @media (max-width: 768px) {
+            .p-8 {
+                padding: 1.5rem;
+            }
+            
+            .mb-8 {
+                margin-bottom: 1.5rem;
+            }
+            
+            .text-3xl {
+                font-size: 1.75rem;
+            }
+            
+            .grid-cols-1 {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            body, html {
+                font-size: 15px;
+            }
+            
+            .p-8 {
+                padding: 1rem;
+            }
+            
+            .mb-8 {
+                margin-bottom: 1rem;
+            }
+            
+            .text-3xl {
+                font-size: 1.5rem;
+            }
+            
+            .mb-10 {
+                margin-bottom: 1.5rem;
+            }
+            
+            .w-16 {
+                width: 3rem;
+            }
+            
+            .sidebar-icon {
+                padding: 0.5rem;
+            }
+            
+            /* Improve upload area on mobile */
+            .upload-area {
+                padding: 1.5rem !important;
+            }
+            
+            .upload-area h3 {
+                font-size: 1.1rem;
+            }
+            
+            .upload-area svg {
+                height: 2.5rem;
+                width: 2.5rem;
+            }
+            
+            /* Fix PDF cards on mobile */
+            .card {
+                padding: 1rem;
+            }
+            
+            /* Fix text overflow in card titles */
+            .card h4 {
+                font-size: 1rem;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                max-width: 100%;
+            }
+            
+            /* Fix overflow on PDF cards */
+            .card .flex-1 {
+                min-width: 0;
+            }
+            
+            /* Fix icon spacing */
+            .card .p-2 {
+                padding: 0.375rem;
+            }
+            
+            /* Fix notification button */
+            .bg-dark.border.text-gray-300 {
+                padding: 0.5rem;
+            }
+            
+            .bg-dark.border.text-gray-300 span {
+                display: none;
+            }
+            
+            /* Improve recent activity cards */
+            .grid.grid-cols-1.gap-6 {
+                gap: 0.75rem;
+            }
+            
+            /* Fix for iOS */
+            @supports (-webkit-touch-callout: none) {
+                /* Improve touch targets */
+                button, a, .card {
+                    -webkit-tap-highlight-color: transparent;
+                }
+                
+                /* Fix notches and safe areas */
+                @supports (padding-top: env(safe-area-inset-top)) {
+                    body {
+                        padding-top: env(safe-area-inset-top);
+                        padding-bottom: env(safe-area-inset-bottom);
+                        padding-left: env(safe-area-inset-left);
+                        padding-right: env(safe-area-inset-right);
+                    }
+                }
+            }
+        }
+    </style>
+</head>
+
+<body class="min-h-screen">
+    <div x-data="dashboard()" class="flex min-h-screen">
+        <!-- Sidebar -->
+        <div class="w-16 bg-dark border-r border-gray-700 flex flex-col items-center py-6">
+            <div class="sidebar-icon mb-8">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+            </div>
+            
+            <a href="#" class="sidebar-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+            </a>
+            
+            <a href="/chat" class="sidebar-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+            </a>
+            
+            <a href="/test" class="sidebar-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+            </a>
+            
+            <a href="#" class="sidebar-icon mt-auto">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+            </a>
+        </div>
+        
+        <!-- Main Content -->
+        <div class="flex-1 p-8">
+            <header class="flex justify-between items-center mb-8">
+                <div class="flex items-center">
+                    <h1 class="text-2xl font-bold text-green">Lucifer AI</h1>
+                    <span class="ml-2 text-xs bg-green text-white px-2 py-0.5 rounded-full">Beta</span>
+                </div>
+                
+                <button class="bg-dark border border-gray-700 text-gray-300 hover:text-white px-4 py-2 rounded-lg flex items-center space-x-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                    </svg>
+                    <span>Notifications</span>
+                </button>
+            </header>
+            
+            <div class="mb-10 text-center">
+                <h2 class="text-3xl font-bold mb-2">Your AI Study Companion</h2>
+                <p class="text-gray-400">Upload your study material and get answers instantly</p>
+            </div>
+            
+            <!-- Upload Section -->
+            <div class="mb-10">
+                <div class="bg-dark bg-opacity-50 rounded-xl p-8 border border-gray-800">
+                    <div 
+                        x-data="dropzone()"
+                        x-on:dragover="handleDragOver"
+                        x-on:dragleave="handleDragLeave"
+                        x-on:drop="handleDrop"
+                        x-on:file-dropped="$event.detail.file && uploadFile($event.detail.file)"
+                        class="upload-area flex flex-col items-center justify-center p-10 transition-all duration-300"
+                        :class="{'dragging': isDragging}"
+                    >
+                        <div class="bg-green bg-opacity-10 p-4 rounded-full mb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-green" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                            </svg>
+                        </div>
+                        <h3 class="text-xl font-semibold mb-2 text-green">Drag & Drop your PDF here</h3>
+                        <p class="text-gray-400 mb-4">or click to browse your files</p>
+                        <button class="btn-green" @click="openFileBrowser()">Choose File</button>
+                        <input type="file" id="fileInput" class="hidden" accept=".pdf" @change="handleFileUpload($event)">
+                        <p class="text-gray-500 text-sm mt-4">Supported formats: PDF (max. 50MB)</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Loading indicator -->
+            <div x-show="isLoading" class="text-center py-10">
+                <div class="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-green border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]"></div>
+                <p class="mt-2 text-gray-400">Loading your content...</p>
+            </div>
+            
+            <!-- Recent Activity Section -->
+            <div x-show="!isLoading">
+                <h3 class="text-xl font-semibold mb-4 text-white">Recent Activity</h3>
+                
+                <!-- Empty state message when no PDFs are available -->
+                <div x-show="pdfs.length === 0" class="text-center py-8 bg-dark bg-opacity-50 rounded-xl border border-gray-800 mb-6">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-gray-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <h4 class="text-xl font-semibold text-gray-400 mb-2">No PDFs Available</h4>
+                    <p class="text-gray-500 mb-4">Upload your first PDF to get started</p>
+                    <button class="btn-green" @click="openFileBrowser()">Upload PDF</button>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6" x-show="pdfs.length > 0">
+                    <!-- PDF Cards -->
+                    <template x-for="pdf in pdfs" :key="pdf.id">
+                        <div class="card p-5 transition-all relative" :class="{'opacity-75': pdf.isUploading}">
+                            <!-- Add 3-dot menu in the top-right corner -->
+                            <div class="absolute top-2 right-2">
+                                <div class="relative" x-data="{ showMenu: false }">
+                                    <button @click.stop="showMenu = !showMenu" class="text-gray-400 hover:text-green p-1 rounded-full">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                                        </svg>
+                                    </button>
+                                    <div x-show="showMenu" 
+                                         @click.away="showMenu = false"
+                                         x-transition:enter="transition ease-out duration-100"
+                                         x-transition:enter-start="opacity-0 transform scale-95"
+                                         x-transition:enter-end="opacity-100 transform scale-100"
+                                         x-transition:leave="transition ease-in duration-75"
+                                         x-transition:leave-start="opacity-100 transform scale-100"
+                                         x-transition:leave-end="opacity-0 transform scale-95"
+                                         class="absolute right-0 z-10 mt-2 w-36 bg-dark border border-gray-700 rounded-md shadow-lg"
+                                         x-cloak>
+                                        <div class="py-1">
+                                            <button @click.stop="deletePDF(pdf.id)" class="flex items-center w-full px-4 py-2 text-sm text-red-400 hover:bg-gray-800">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                                Delete
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex items-start" @click="openChat(pdf.id)">
+                                <div class="p-2 bg-green bg-opacity-10 rounded-lg">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                </div>
+                                <div class="ml-3 flex-1 min-w-0">
+                                    <h4 class="font-semibold text-white text-lg truncate" x-text="pdf.name"></h4>
+                                    <p class="text-gray-400 text-sm truncate" x-text="pdf.timeAgo"></p>
+                                </div>
+                            </div>
+                            
+                            <div class="mt-4 flex justify-between items-center">
+                                <span class="text-gray-400 text-sm" x-text="pdf.isUploading ? 'Uploading...' : `${pdf.pages} pages`"></span>
+                                <button class="text-green hover:text-green-light" @click="openChat(pdf.id)">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                    
+                    <!-- AI Chat Session Cards -->
+                    <template x-for="session in chatSessions" :key="session.id">
+                        <div class="card p-5 cursor-pointer" @click="openChatSession(session.id)">
+                            <div class="flex items-start">
+                                <div class="p-2 bg-green bg-opacity-10 rounded-lg">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                                    </svg>
+                                </div>
+                                <div class="ml-3 flex-1 min-w-0">
+                                    <h4 class="font-semibold text-white text-lg truncate">AI Chat Session</h4>
+                                    <p class="text-gray-400 text-sm truncate" x-text="session.date"></p>
+                                </div>
+                            </div>
+                            
+                            <div class="mt-4 flex justify-between items-center">
+                                <span class="text-gray-400 text-sm" x-text="`${session.messages} messages`"></span>
+                                <button class="text-green hover:text-green-light">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                    
+                    <!-- Practice Test Cards -->
+                    <template x-for="test in practiceTests" :key="test.id">
+                        <div class="card p-5 cursor-pointer" @click="openTest(test.id)">
+                            <div class="flex items-start">
+                                <div class="p-2 bg-green bg-opacity-10 rounded-lg">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                                    </svg>
+                                </div>
+                                <div class="ml-3 flex-1 min-w-0">
+                                    <h4 class="font-semibold text-white text-lg truncate">Practice Test</h4>
+                                    <p class="text-gray-400 text-sm truncate" x-text="test.timeAgo"></p>
+                                </div>
+                            </div>
+                            
+                            <div class="mt-4 flex justify-between items-center">
+                                <span class="text-gray-400 text-sm" x-text="`Score: ${test.score}%`"></span>
+                                <button class="text-green hover:text-green-light">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                
+                <!-- Empty State -->
+                <div x-show="pdfs.length === 0 && chatSessions.length === 0 && practiceTests.length === 0" class="text-center py-10">
+                    <div class="bg-green bg-opacity-10 p-3 rounded-full inline-flex mb-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-green" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-medium text-white mb-2">No activity yet</h3>
+                    <p class="text-gray-400">Upload a PDF to get started with Lucifer AI</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Notification component -->
+    <div id="notification" class="notification">
+        <span id="notification-message"></span>
+    </div>
+    
+    <!-- Custom JavaScript -->
+    <script src="/static/js/dashboard.js"></script>
+    <script>
+        function dashboard() {
+            return {
+                // ... existing code ...
+            }
+        }
+    </script>
+</body>
+</html> 
