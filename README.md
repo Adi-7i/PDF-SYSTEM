@@ -1,6 +1,6 @@
 # AI-Powered PDF Q&A System
 
-A robust AI-powered PDF-based Q&A system built with Python and FastAPI that allows users to upload multiple PDFs and ask questions about their content. Now featuring Google's Gemini AI for enhanced summaries and more accurate answers!
+A robust AI-powered PDF-based Q&A system built with Python and FastAPI that allows users to upload multiple PDFs and ask questions about their content. Now featuring Azure OpenAI for enhanced summaries and more accurate answers!
 
 ## Features
 
@@ -8,7 +8,7 @@ A robust AI-powered PDF-based Q&A system built with Python and FastAPI that allo
 - Extract and understand text from PDFs
 - Ask questions about the content of uploaded PDFs
 - Get accurate answers based on the PDF content
-- **NEW: Gemini AI integration for advanced summarization and question answering**
+- **NEW: Azure OpenAI integration for advanced summarization and question answering**
 - **NEW: Compare standard vs AI-powered answers**
 - Clean and intuitive web interface
 - Batch upload functionality
@@ -20,7 +20,7 @@ A robust AI-powered PDF-based Q&A system built with Python and FastAPI that allo
 - FastAPI
 - SQLAlchemy
 - PyPDF2
-- Google's Generative AI SDK
+- Azure OpenAI (configured via environment variables)
 - Other dependencies listed in requirements.txt
 
 ## Installation
@@ -50,8 +50,7 @@ pip install -r requirements.txt
 # Copy the example environment file
 cp .env.example .env
 
-# Edit the .env file with your Gemini API key
-# Get your API key from https://aistudio.google.com/
+# Edit the .env file with your Azure OpenAI settings
 ```
 
 ## Usage
@@ -67,7 +66,7 @@ python run.py
 
 4. Ask questions about the content of the uploaded PDFs
 
-5. Use the Gemini AI toggle to get enhanced AI-powered answers
+5. Use the AI toggle to get enhanced AI-powered answers
 
 6. View detailed AI summaries of your PDF documents
 
@@ -84,7 +83,8 @@ pdfbook/
 │   │   └── models.py
 │   ├── services/
 │   │   ├── embedding_service.py
-│   │   ├── gemini_service.py    # New Gemini AI integration
+│   │   ├── gemini_service.py    # LLM features (Azure OpenAI-backed)
+│   │   ├── azure_openai_client.py
 │   │   ├── pdf_service.py
 │   │   └── qa_service.py
 │   ├── static/
@@ -112,9 +112,9 @@ pdfbook/
 4. **Embedding Generation**: Embeddings are generated for each chunk
 5. **Question Answering**: 
    - **Standard Mode**: The system finds the most relevant chunks using similarity search
-   - **Gemini AI Mode**: The system uses Google's Gemini AI to analyze the PDF content and generate more accurate, context-aware answers
+   - **AI Mode**: The system uses Azure OpenAI to analyze the PDF content and generate more accurate, context-aware answers
 
-## Gemini AI Features
+## Azure OpenAI Features
 
 ### AI-Powered PDF Summaries
 - Generate comprehensive summaries of PDF documents
@@ -129,10 +129,9 @@ pdfbook/
 - Option to compare with standard embedding-based answers
 
 ### Setup
-To use the Gemini AI features:
-1. Obtain an API key from [Google AI Studio](https://aistudio.google.com/)
-2. Add your key to the `.env` file
-3. Restart the application
+To use the AI features:
+1. Configure `LLM_API_KEY`, `LLM_AZURE_BASE_URL`, `LLM_AZURE_API_VERSION`, and `LLM_AZURE_DEPLOYMENT` in `.env`
+2. Restart the application
 
 ## Future Improvements
 

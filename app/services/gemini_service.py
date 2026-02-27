@@ -1,7 +1,6 @@
 import os
 import logging
 import json
-import google.generativeai as genai
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 import re
@@ -12,23 +11,21 @@ import sympy as sp
 import random
 
 from app.models.models import PDF, PDFContent, PDFChunk
+from .azure_openai_client import AzureOpenAIConfigError, chat_completion_async, chat_completion_sync
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Download necessary NLTK data
-try:
-    nltk.download('punkt', quiet=True)
-    nltk.download('vader_lexicon', quiet=True)
-    nltk.download('averaged_perceptron_tagger', quiet=True)
-    logger.info("NLTK data downloaded successfully")
-except Exception as e:
-    logger.warning(f"Failed to download NLTK data: {str(e)}")
-
-# Hardcoded API key (temporarily, for development only)
-# For production, use environment variables or a secure config
-GEMINI_API_KEY = "AIzaSyDrpQAfGDiFTXEzBitBIn9gj1fEMCiHVus"
+# Downloading at import-time can hang in offline environments; keep it opt-in.
+if os.environ.get("NLTK_AUTO_DOWNLOAD", "false").lower() == "true":
+    try:
+        nltk.download("punkt", quiet=True)
+        nltk.download("vader_lexicon", quiet=True)
+        nltk.download("averaged_perceptron_tagger", quiet=True)
+        logger.info("NLTK data downloaded successfully")
+    except Exception as e:
+        logger.warning(f"Failed to download NLTK data: {str(e)}")
 
 # AI Identity configuration
 AI_NAME = "Lucifer"
@@ -36,85 +33,39 @@ AI_VERSION = "1.0.0"
 AI_CREATOR = "Lucifer"
 AI_DESCRIPTION = "An intelligent assistant that can analyze documents, answer questions, and engage in natural conversation."
 
-if not GEMINI_API_KEY:
-    logger.warning("API key not set. Lucifer AI features will not work.")
-else:
-    logger.info("Configuring Lucifer AI with API key")
-    genai.configure(api_key=GEMINI_API_KEY)
-
 # Define AI model configuration
-MODEL_NAME = "gemini-1.5-pro"  # Use the most capable model
 TEMPERATURE = 0.2  # Lower temperature for more factual responses
 MAX_OUTPUT_TOKENS = 2048  # Maximum length of generated text
 
-def initialize_gemini_model():
-    """Initialize and return Lucifer AI model if API key is available"""
-    if not GEMINI_API_KEY:
-        logger.error("Cannot initialize Lucifer model: No API key provided")
-        return None
-    
-    try:
-        generation_config = {
-            "temperature": TEMPERATURE,
-            "max_output_tokens": MAX_OUTPUT_TOKENS,
-            "top_p": 0.95,
-            "top_k": 40,
-        }
-        
-        # Initialize the model
-        model = genai.GenerativeModel(
-            model_name=MODEL_NAME,
-            generation_config=generation_config,
-            safety_settings=[
-                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-            ],
-        )
-        
-        logger.info(f"Successfully initialized Lucifer model using {MODEL_NAME}")
-        return model
-        
-    except Exception as e:
-        logger.error(f"Error initializing Lucifer model: {str(e)}")
-        return None
+def _llm_configured() -> bool:
+    # Primary config requested by user + common fallbacks.
+    api_key = os.environ.get("LLM_API_KEY") or os.environ.get("AZURE_OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    base_url = os.environ.get("LLM_AZURE_BASE_URL") or os.environ.get("AZURE_OPENAI_ENDPOINT") or os.environ.get("AZURE_OPENAI_BASE_URL")
+    deployment = os.environ.get("LLM_AZURE_DEPLOYMENT") or os.environ.get("AZURE_OPENAI_DEPLOYMENT")
+    return bool(api_key and base_url and deployment)
 
-# Initialize the model once at module level
-gemini_model = initialize_gemini_model()
 
-def get_fresh_model():
-    """Get a fresh instance of the Gemini model to ensure clean context"""
-    if not GEMINI_API_KEY:
-        logger.error("Cannot initialize Gemini model: No API key provided")
-        return None
-    
-    try:
-        generation_config = {
-            "temperature": TEMPERATURE,
-            "max_output_tokens": MAX_OUTPUT_TOKENS,
-            "top_p": 0.95,
-            "top_k": 40,
-        }
-        
-        # Initialize the model with a clean slate
-        fresh_model = genai.GenerativeModel(
-            model_name=MODEL_NAME,
-            generation_config=generation_config,
-            safety_settings=[
-                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-            ],
-        )
-        
-        logger.info(f"Created fresh Gemini model instance using {MODEL_NAME}")
-        return fresh_model
-        
-    except Exception as e:
-        logger.error(f"Error initializing fresh Gemini model: {str(e)}")
-        return None
+async def _llm_generate(prompt: str, *, temperature: float = TEMPERATURE, max_tokens: int = MAX_OUTPUT_TOKENS) -> str:
+    return await chat_completion_async(
+        prompt=prompt,
+        system=f"You are {AI_NAME}, a helpful assistant.",
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+
+
+def _llm_generate_sync(prompt: str, *, temperature: float = TEMPERATURE, max_tokens: int = MAX_OUTPUT_TOKENS) -> str:
+    return chat_completion_sync(
+        prompt=prompt,
+        system=f"You are {AI_NAME}, a helpful assistant.",
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+
+
+def llm_available() -> bool:
+    # Evaluate at request-time so loading `.env` after import still works.
+    return _llm_configured()
 
 async def generate_ai_summary(db: Session, pdf_id: int) -> Dict[str, Any]:
     """
@@ -123,11 +74,11 @@ async def generate_ai_summary(db: Session, pdf_id: int) -> Dict[str, Any]:
     """
     logger.info(f"Generating AI summary for PDF {pdf_id} using Lucifer")
     
-    if not gemini_model:
-        logger.error("Lucifer model not initialized. Cannot generate AI summary.")
+    if not llm_available():
+        logger.error("LLM not configured. Cannot generate AI summary.")
         return {
             "success": False,
-            "message": "AI summary generation not available. Check if API key is set.",
+            "message": "AI summary generation not available. Configure LLM_API_KEY, LLM_AZURE_BASE_URL, and LLM_AZURE_DEPLOYMENT.",
         }
     
     # Get PDF information
@@ -177,9 +128,8 @@ async def generate_ai_summary(db: Session, pdf_id: int) -> Dict[str, Any]:
         {text_content}
         """
         
-        # Generate summary using Lucifer AI
-        response = await gemini_model.generate_content_async(prompt)
-        summary_text = response.text
+        # Generate summary using Azure OpenAI (configured via env vars)
+        summary_text = await _llm_generate(prompt)
         
         # Extract keywords from the summary
         keyword_prompt = f"""
@@ -191,10 +141,10 @@ async def generate_ai_summary(db: Session, pdf_id: int) -> Dict[str, Any]:
         Text: {text_content[:5000]}
         """
         
-        keyword_response = await gemini_model.generate_content_async(keyword_prompt)
+        keywords_text = await _llm_generate(keyword_prompt)
         try:
             # Parse the keywords response
-            keywords_text = keyword_response.text.strip()
+            keywords_text = keywords_text.strip()
             # Clean up the response to ensure it's valid JSON
             if keywords_text.startswith("```json"):
                 keywords_text = keywords_text.split("```json")[1].split("```")[0].strip()
@@ -286,7 +236,7 @@ async def answer_question_with_ai(db: Session, question: str, pdf_id: Optional[i
                 any(phrase in text_lower for phrase in hindi_phrases))
     
     # Function to simplify a complex answer
-    async def simplify_answer(complex_answer: str, question: str, model) -> str:
+    async def simplify_answer(complex_answer: str, question: str) -> str:
         """
         Create a simplified version of a complex answer.
         Uses the AI model to generate a more accessible explanation.
@@ -309,14 +259,13 @@ async def answer_question_with_ai(db: Session, question: str, pdf_id: Optional[i
         """
         
         try:
-            response = await model.generate_content_async(simplify_prompt)
-            return response.text.strip()
+            return (await _llm_generate(simplify_prompt)).strip()
         except Exception as e:
             logger.error(f"Error simplifying answer: {str(e)}")
             return f"I tried to simplify, but encountered an error. Here's the original answer: {complex_answer}"
     
     # Function to improve explanation with examples and visuals
-    async def enhance_with_examples(complex_answer: str, question: str, model) -> str:
+    async def enhance_with_examples(complex_answer: str, question: str) -> str:
         """
         Create an improved answer with examples, diagrams, and more accessible explanations.
         """
@@ -338,8 +287,7 @@ async def answer_question_with_ai(db: Session, question: str, pdf_id: Optional[i
         """
         
         try:
-            response = await model.generate_content_async(enhance_prompt)
-            return response.text.strip()
+            return (await _llm_generate(enhance_prompt)).strip()
         except Exception as e:
             logger.error(f"Error enhancing answer: {str(e)}")
             return f"I tried to provide better examples, but encountered an error. Here's the original answer: {complex_answer}"
@@ -348,13 +296,7 @@ async def answer_question_with_ai(db: Session, question: str, pdf_id: Optional[i
     if is_followup and previous_answer:
         logger.info("This is a follow-up question, generating improved answer...")
         try:
-            # Get a fresh model for the follow-up
-            fresh_model = get_fresh_model()
-            if not fresh_model:
-                logger.warning("Could not create fresh model for follow-up, using existing model")
-                fresh_model = gemini_model
-            
-            improved_answer = await generate_followup_answer(question, previous_answer, fresh_model)
+            improved_answer = await generate_followup_answer(question, previous_answer)
             
             return {
                 "success": True,
@@ -370,12 +312,12 @@ async def answer_question_with_ai(db: Session, question: str, pdf_id: Optional[i
             logger.error(f"Error generating follow-up answer: {str(e)}")
             # Fall back to regular question answering
     
-    # First, ensure the Gemini model is available
-    if not gemini_model:
-        logger.error("Gemini model not initialized. Cannot answer question.")
+    # First, ensure the LLM is configured
+    if not llm_available():
+        logger.error("LLM not configured. Cannot answer question.")
         return {
             "success": False,
-            "message": "AI services not available. Check if API key is set.",
+            "message": "AI services not available. Configure LLM_API_KEY, LLM_AZURE_BASE_URL, and LLM_AZURE_DEPLOYMENT.",
             "question": question
         }
     
@@ -430,8 +372,7 @@ async def answer_question_with_ai(db: Session, question: str, pdf_id: Optional[i
             # Special handling for general knowledge questions that don't require PDFs
             if is_tech_question(question):
                 logger.info("Technology question detected, proceeding with general knowledge")
-                tech_model = get_fresh_model() or gemini_model
-                tech_response = await handle_tech_question(question, tech_model)
+                tech_response = await handle_tech_question(question)
                 if tech_response:
                     return tech_response
             
@@ -474,8 +415,7 @@ async def answer_question_with_ai(db: Session, question: str, pdf_id: Optional[i
         # Handle conversational or knowledge-based queries instead
         if is_tech_question(question):
             logger.info("Technology question detected, proceeding with general knowledge")
-            tech_model = get_fresh_model() or gemini_model
-            tech_response = await handle_tech_question(question, tech_model)
+            tech_response = await handle_tech_question(question)
             if tech_response:
                 return tech_response
         
@@ -495,7 +435,6 @@ async def answer_question_with_ai(db: Session, question: str, pdf_id: Optional[i
         # Two approaches: First try with the most relevant chunks, 
         # and if we don't get a good answer, try with more context.
         combined_content = ""
-        fresh_model = get_fresh_model() or gemini_model
         
         # APPROACH 1: Use the most relevant chunks if found
         if relevant_chunks:
@@ -529,11 +468,10 @@ async def answer_question_with_ai(db: Session, question: str, pdf_id: Optional[i
             5. Format your answer clearly, using markdown if needed
             """
             
-            # Generate answer from the model
+                # Generate answer from the model
             try:
                 logger.info("Attempting to answer with most relevant chunks first")
-                chunks_response = await fresh_model.generate_content_async(chunks_prompt)
-                chunks_answer = chunks_response.text
+                chunks_answer = await _llm_generate(chunks_prompt)
                 
                 # Check if the answer indicates no information was found
                 not_found_phrases = [
@@ -605,8 +543,7 @@ async def answer_question_with_ai(db: Session, question: str, pdf_id: Optional[i
                 """
                 
                 # Generate answer using the full content approach
-                full_response = await fresh_model.generate_content_async(full_prompt)
-                answer_text = full_response.text
+                answer_text = await _llm_generate(full_prompt)
                 
                 # If we still don't have a good answer, try one more time with different sampling
                 not_found_phrases = [
@@ -669,8 +606,7 @@ async def answer_question_with_ai(db: Session, question: str, pdf_id: Optional[i
                     """
                     
                     # Generate answer using the sliding window approach
-                    window_response = await fresh_model.generate_content_async(window_prompt)
-                    answer_text = window_response.text
+                    answer_text = await _llm_generate(window_prompt)
         else:
             # No relevant chunks found, try with full content approach directly
             logger.info("No relevant chunks found, using full content approach")
@@ -717,8 +653,7 @@ async def answer_question_with_ai(db: Session, question: str, pdf_id: Optional[i
             """
             
             # Generate answer using the full content approach
-            full_response = await fresh_model.generate_content_async(full_prompt)
-            answer_text = full_response.text
+            answer_text = await _llm_generate(full_prompt)
         
         # Clean and format the answer
         answer_text = clean_response(answer_text, question)
@@ -760,10 +695,10 @@ async def answer_question_with_ai(db: Session, question: str, pdf_id: Optional[i
         logger.error(traceback.format_exc())
         
         # Handle specific cases
-        if isinstance(e, ValueError) and "API key not available" in str(e):
+        if isinstance(e, AzureOpenAIConfigError):
             return {
                 "success": False,
-                "message": "AI services not available. Please check API key configuration.",
+                "message": "AI services not available. Configure LLM_API_KEY, LLM_AZURE_BASE_URL, and LLM_AZURE_DEPLOYMENT.",
                 "question": question
             }
         
@@ -1013,9 +948,6 @@ async def generate_followup_answer(question: str, previous_answer: str, fresh_mo
     """
     Generate a more detailed follow-up answer when user is not satisfied with the initial response.
     """
-    if not fresh_model:
-        fresh_model = get_fresh_model() or gemini_model
-    
     try:
         followup_prompt = f"""
         You are {AI_NAME}, a helpful and detailed AI assistant.
@@ -1038,8 +970,7 @@ async def generate_followup_answer(question: str, previous_answer: str, fresh_mo
         Make your explanation clearer, more detailed, and more authoritative than the previous answer.
         """
         
-        response = await fresh_model.generate_content_async(followup_prompt)
-        improved_answer = response.text
+        improved_answer = await _llm_generate(followup_prompt)
         
         # Format the answer
         improved_answer = format_code_blocks(improved_answer)
@@ -1052,7 +983,7 @@ async def generate_followup_answer(question: str, previous_answer: str, fresh_mo
         return "I apologize, but I'm having trouble generating a better answer. Let me try a different approach to help you with your question."
 
 # Modify handle_tech_question to add thinking effect and format code
-async def handle_tech_question(query: str, model) -> Dict[str, Any]:
+async def handle_tech_question(query: str) -> Dict[str, Any]:
     """Handle technology or programming related questions."""
     try:
         # For user questions, first check if there are relevant PDFs
@@ -1103,8 +1034,7 @@ async def handle_tech_question(query: str, model) -> Dict[str, Any]:
             5. Do not invent information not present in the PDF content
             """
             
-            response = await model.generate_content_async(pdf_prompt)
-            answer_text = response.text
+            answer_text = await _llm_generate(pdf_prompt)
             
             return {
                 "success": True,
@@ -1162,8 +1092,7 @@ async def handle_tech_question(query: str, model) -> Dict[str, Any]:
         3. Include only necessary imports
         """
         
-        response = await model.generate_content_async(tech_prompt)
-        answer_text = response.text
+        answer_text = await _llm_generate(tech_prompt)
         
         # Further trim the response for brevity
         sentences = answer_text.split(". ")
@@ -1224,8 +1153,6 @@ async def handle_conversational_query(query: str) -> Dict[str, Any]:
         context = "\n\n".join(relevant_chunks)
         
         # Get a fresh model for the PDF-based question
-        fresh_model = get_fresh_model() or gemini_model
-        
         # Create a prompt for Gemini to answer based on the PDF content
         pdf_prompt = f"""
         You are {AI_NAME}, a knowledgeable AI assistant.
@@ -1245,8 +1172,7 @@ async def handle_conversational_query(query: str) -> Dict[str, Any]:
         5. Do not invent information not present in the PDF content
         """
         
-        response = await fresh_model.generate_content_async(pdf_prompt)
-        answer_text = response.text
+        answer_text = await _llm_generate(pdf_prompt)
         
         return {
             "success": True,
@@ -1285,12 +1211,9 @@ async def handle_conversational_query(query: str) -> Dict[str, Any]:
     
     # Check for technology questions
     if is_tech_question(query):
-        # Get a fresh model for the tech question
-        tech_model = get_fresh_model() or gemini_model
-        if tech_model:
-            tech_response = await handle_tech_question(query, tech_model)
-            if tech_response:
-                return tech_response
+        tech_response = await handle_tech_question(query)
+        if tech_response:
+            return tech_response
     
     # Try to handle mathematical queries
     math_response = handle_math_query(query)
@@ -1334,7 +1257,7 @@ async def handle_conversational_query(query: str) -> Dict[str, Any]:
             "sentiment": sentiment
         }
     
-    # If it's a general conversational query, use Gemini for a natural response
+    # If it's a general conversational query, let the caller decide what to do.
     return None 
 
 def simplify_complex_answer(complex_answer: str, user_query: str) -> str:
@@ -1343,9 +1266,6 @@ def simplify_complex_answer(complex_answer: str, user_query: str) -> str:
     """
     try:
         logging.info(f"Simplifying complex answer for query: {user_query}")
-        
-        # Create a fresh model instance
-        model = get_fresh_model()
         
         # Create a detailed prompt for simplification
         prompt = f"""You are Lucifer AI Assistant. A user asked: "{user_query}" 
@@ -1366,8 +1286,7 @@ def simplify_complex_answer(complex_answer: str, user_query: str) -> str:
         Your simplified answer should make complex ideas accessible while respecting the user's intelligence.
         """
         
-        response = model.generate_content(prompt)
-        simplified_answer = response.text
+        simplified_answer = _llm_generate_sync(prompt)
         
         # Add note about the simplification
         simplified_answer = f"{simplified_answer}\n\n(I've simplified this explanation to make it more accessible. Let me know if you need any part explained differently or in more detail.)"

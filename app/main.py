@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import os
+from dotenv import load_dotenv
 import uuid
 import logging
 from typing import List, Optional
@@ -12,12 +13,15 @@ import numpy as np
 import time
 import re
 
+load_dotenv()
+
 from app.db.database import get_db, engine
 from app.models.models import Base, PDF, PDFContent, PDFChunk
 from app.services.pdf_service import extract_text_from_pdf, save_pdf_to_db, get_all_pdfs, generate_summary
 from app.services.qa_service import answer_question
 from app.services.embedding_service import get_embeddings, cosine_similarity
 from app.services.gemini_service import generate_ai_summary, answer_question_with_ai
+from app.services.azure_openai_client import AzureOpenAIConfigError, chat_completion_async, chat_completion_sync
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -598,7 +602,7 @@ async def get_pdf_summary_with_ai(pdf_id: int):
         db = next(get_db())
         
         # Generate summary using AI
-        summary = generate_ai_summary(db, pdf_id)
+        summary = await generate_ai_summary(db, pdf_id)
         
         if not summary.get("success", False):
             return JSONResponse(
@@ -621,13 +625,13 @@ async def get_pdf_summary_with_ai(pdf_id: int):
 
 @app.get("/pdf/{pdf_id}/ai-summary")
 async def get_pdf_ai_summary(pdf_id: int):
-    """Get an AI-powered summary of a PDF document using Gemini AI"""
+    """Get an AI-powered summary of a PDF document using Azure OpenAI"""
     try:
         logger.info(f"Getting AI summary for PDF with ID: {pdf_id}")
         
         db = next(get_db())
         
-        # Generate summary using Gemini AI
+        # Generate summary using Azure OpenAI
         summary = await generate_ai_summary(db, pdf_id)
         
         if not summary.get("success", False):
@@ -651,7 +655,7 @@ async def get_pdf_ai_summary(pdf_id: int):
 
 @app.post("/ask-ai")
 async def ask_question_ai(request: Request):
-    """Answer a question using Gemini AI based on the content of uploaded PDFs"""
+    """Answer a question using Azure OpenAI based on the content of uploaded PDFs"""
     global recent_responses
     
     try:
@@ -757,7 +761,7 @@ async def ask_question_ai(request: Request):
                     content={"success": False, "message": "No PDFs available. Please upload PDFs first."}
                 )
         
-        # Process the question using Gemini AI with timeout handling
+        # Process the question using the LLM with timeout handling
         try:
             answer_data = await asyncio.wait_for(
                 answer_question_with_ai(db, question, pdf_id),
@@ -833,7 +837,7 @@ async def ask_question_ai(request: Request):
 
 @app.post("/compare-answers")
 async def compare_answers(request: Request):
-    """Compare answers from both regular QA and Gemini AI"""
+    """Compare answers from both regular QA and Azure OpenAI-backed QA"""
     try:
         # Parse JSON request
         data = await request.json()
@@ -863,7 +867,7 @@ async def compare_answers(request: Request):
         # Get answer from regular QA system
         regular_answer = answer_question(db, question)
         
-        # Get answer from Gemini AI
+        # Get answer from the LLM
         ai_answer_data = await answer_question_with_ai(db, question, pdf_id)
         
         return JSONResponse(
@@ -1091,9 +1095,13 @@ async def general_knowledge_question(request: Request):
         If you don't know the answer with certainty, say so rather than making up information.
         """
         
-        # Generate answer using Gemini AI
-        response = await gemini_model.generate_content_async(prompt)
-        answer_text = response.text
+        # Generate answer using Azure OpenAI (configured via env vars)
+        answer_text = await chat_completion_async(
+            prompt=prompt,
+            system="You answer general knowledge questions clearly and concisely.",
+            temperature=0.2,
+            max_tokens=800,
+        )
         
         return JSONResponse(
             status_code=200,
@@ -1109,6 +1117,11 @@ async def general_knowledge_question(request: Request):
         logger.error(f"Error processing general knowledge question: {str(e)}")
         import traceback
         logger.error(traceback.format_exc())
+        if isinstance(e, AzureOpenAIConfigError):
+            return JSONResponse(
+                status_code=503,
+                content={"success": False, "message": "LLM not configured. Set LLM_API_KEY, LLM_AZURE_BASE_URL, and LLM_AZURE_DEPLOYMENT."},
+            )
         return JSONResponse(
             status_code=500,
             content={"success": False, "message": f"Error processing general knowledge question: {str(e)}"}
@@ -1433,11 +1446,10 @@ async def generate_test(request: Request):
             
         logger.info(f"Test type {test_type}: Generating {mcq_count} MCQs and {long_count} long questions")
         
-        # Mock AI service for question generation (simulating Gemini integration)
+        # AI service for question generation (uses Azure OpenAI if configured; otherwise falls back to local mock generation)
         def generate_questions_with_ai(content, structured_content, test_type, difficulty, pdf_titles):
             try:
-                # Try to use Gemini AI if available 
-                # This will call the real Gemini API if credentials are properly configured
+                # Try to use the configured LLM first (Azure OpenAI)
                 questions = generate_with_gemini(content, structured_content, test_type, difficulty, pdf_titles)
                 if questions and len(questions) > 0:
                     # Additional validation to ensure question type consistency
@@ -1448,11 +1460,11 @@ async def generate_test(request: Request):
                         # For long form, filter out any MCQ questions
                         questions = [q for q in questions if not q.get('options')]
                         
-                    logger.info("Successfully generated questions using Gemini API")
+                    logger.info("Successfully generated questions using Azure OpenAI")
                     return questions
             except Exception as e:
-                logger.warning(f"Error using Gemini API: {str(e)}. Falling back to mock implementation.")
-                # If Gemini call fails, use our fallback mock implementation
+                logger.warning(f"Error using Azure OpenAI: {str(e)}. Falling back to mock implementation.")
+                # If LLM call fails, use our fallback mock implementation
             
             # Fallback implementation (same as before)
             import random
@@ -1777,21 +1789,9 @@ async def generate_test(request: Request):
             return questions
         
         def generate_with_gemini(content, structured_content, test_type, difficulty, pdf_titles):
-            """Generate high-quality exam-relevant questions using Gemini API"""
+            """Generate high-quality exam-relevant questions using Azure OpenAI (if configured)."""
             try:
-                # Import required libraries for Gemini
-                import google.generativeai as genai
-                import os
                 import re
-                
-                # Configure the Gemini API
-                api_key = os.environ.get("GEMINI_API_KEY")
-                if not api_key:
-                    logger.warning("No Gemini API key found in environment variables")
-                    return None
-                
-                genai.configure(api_key=api_key)
-                model = genai.GenerativeModel('gemini-pro')
                 
                 # Prepare content for thorough analysis
                 # Include more content for better context understanding
@@ -1977,29 +1977,15 @@ async def generate_test(request: Request):
                     - Each long-form question must have a detailed answer guideline
                     """
                 
-                # Call Gemini API with detailed system instructions
-                safety_settings = [
-                    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
-                ]
-                
-                generation_config = {
-                    "temperature": 0.2,  # Lower temperature for more predictable, accurate output
-                    "top_p": 0.95,       # High top_p for good diversity while maintaining quality
-                    "top_k": 40,         # Reasonable top_k for focused responses
-                    "max_output_tokens": 8192,  # Large enough for detailed questions
-                }
-                
-                response = model.generate_content(
-                    prompt,
-                    generation_config=generation_config,
-                    safety_settings=safety_settings
+                response_text = chat_completion_sync(
+                    prompt=prompt,
+                    system="You are an expert educational assessment designer. Return valid JSON only.",
+                    temperature=0.2,
+                    max_tokens=8192,
                 )
                 
-                if not response or not response.text:
-                    logger.warning("Empty response from Gemini API")
+                if not response_text or not str(response_text).strip():
+                    logger.warning("Empty response from Azure OpenAI")
                     return None
                 
                 # Extract JSON from response
@@ -2007,11 +1993,11 @@ async def generate_test(request: Request):
                 import re
                 
                 # Find JSON content within ``` blocks
-                json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response.text)
+                json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response_text)
                 if json_match:
                     json_str = json_match.group(1)
                 else:
-                    json_str = response.text
+                    json_str = response_text
                 
                 # Clean up and parse JSON
                 try:
@@ -2146,12 +2132,12 @@ async def generate_test(request: Request):
                     return validated_questions
                     
                 except Exception as e:
-                    logger.error(f"Error parsing Gemini response: {str(e)}")
-                    logger.error(f"Gemini response: {response.text}")
+                    logger.error(f"Error parsing LLM response: {str(e)}")
+                    logger.error(f"LLM response (truncated): {str(response_text)[:800]}")
                     return None
                 
             except Exception as e:
-                logger.error(f"Error using Gemini: {str(e)}")
+                logger.error(f"Error using Azure OpenAI: {str(e)}")
                 return None
         
         # Generate questions using AI service with structured content
